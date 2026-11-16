@@ -7,9 +7,10 @@ extends Node3D
 ## - Reacts with a happy bounce, wave, haptic pulse, and coaching tip when touched/poked by a hand.
 
 const MASCOT_GLB_PATH: String = "res://assets/Floating Mascots.glb"
-const POKE_RADIUS_M: float = 0.22
+const POKE_RADIUS_M: float = 0.24
 
-var base_spec_pos: Vector3 = Vector3(-0.52, -0.10, 1.05)
+# Positioned comfortably to the player's front-left, well clear of the central 3D HUD board
+var base_spec_pos: Vector3 = Vector3(-0.74, 0.04, 0.88)
 var active_demo_mechanic: int = ZenoEnums.MechanicId.M01_ASTEROID_BRAWLER
 var poke_reaction_timer_s: float = 0.0
 var poke_count: int = 0
@@ -34,8 +35,9 @@ func _build_mascot_hierarchy() -> void:
 	_visual_root = Node3D.new()
 	_visual_root.name = "MascotVisualRoot"
 	_visual_root.scale = Vector3.ONE * 0.18
-	# Rotate 180 deg around Y so local +Z face looks toward the seated player (+Z in Godot)
-	_visual_root.rotation.y = PI
+	# Local +Z in GLB is the mascot's face (Visor, Eyes, Smile, Leaf).
+	# In Godot, the player sits at z=0 looking toward -Z, so +Z faces directly toward the player!
+	_visual_root.rotation = Vector3.ZERO
 	add_child(_visual_root)
 
 	if ResourceLoader.exists(MASCOT_GLB_PATH):
@@ -44,12 +46,13 @@ func _build_mascot_hierarchy() -> void:
 			var instance := packed.instantiate()
 			_visual_root.add_child(instance)
 			_setup_anatomical_pivots(instance)
+			_apply_vibrant_materials(instance)
 
 	_speech_label = Label3D.new()
 	_speech_label.name = "CoachBubble"
-	_speech_label.position = Vector3(0.0, 0.48, 0.0)
-	_speech_label.pixel_size = 0.0022
-	_speech_label.font_size = 24
+	_speech_label.position = Vector3(0.0, 0.46, 0.0)
+	_speech_label.pixel_size = 0.0018
+	_speech_label.font_size = 22
 	_speech_label.outline_size = 6
 	_speech_label.modulate = Color(0.85, 0.98, 1.0)
 	_speech_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -93,6 +96,44 @@ func _setup_anatomical_pivots(glb_root: Node) -> void:
 
 	_leaf_node = glb_root.find_child("Leaf", true, false) as Node3D
 
+func _apply_vibrant_materials(glb_root: Node) -> void:
+	var body_mat := _make_mat(Color(0.84, 0.94, 0.88), 0.35, 0.05)
+	var head_mat := _make_mat(Color(0.94, 0.98, 0.95), 0.30, 0.05)
+	var visor_mat := _make_mat(Color(0.05, 0.09, 0.14), 0.12, 0.25)
+	var face_glow_mat := _make_mat(Color(0.35, 0.96, 1.0), 0.20, 0.0, Color(0.25, 0.90, 1.0), 1.4)
+	var leaf_mat := _make_mat(Color(0.22, 0.78, 0.36), 0.40, 0.0, Color(0.08, 0.30, 0.12), 0.3)
+	var emblem_mat := _make_mat(Color(0.45, 0.85, 0.62), 0.35, 0.1)
+
+	_set_mesh_mat(glb_root, "Torso", body_mat)
+	_set_mesh_mat(glb_root, "Neck", body_mat)
+	_set_mesh_mat(glb_root, "Arm_L", body_mat)
+	_set_mesh_mat(glb_root, "Arm_R", body_mat)
+	_set_mesh_mat(glb_root, "HeadShell", head_mat)
+	_set_mesh_mat(glb_root, "Ear_L", emblem_mat)
+	_set_mesh_mat(glb_root, "Ear_R", emblem_mat)
+	_set_mesh_mat(glb_root, "EmblemDisc", emblem_mat)
+	_set_mesh_mat(glb_root, "Leaf", leaf_mat)
+	_set_mesh_mat(glb_root, "Visor", visor_mat)
+	_set_mesh_mat(glb_root, "Eye_L", face_glow_mat)
+	_set_mesh_mat(glb_root, "Eye_R", face_glow_mat)
+	_set_mesh_mat(glb_root, "Mouth_Smile", face_glow_mat)
+
+func _make_mat(albedo: Color, rough: float, metal: float, emission: Color = Color.BLACK, energy: float = 0.0) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = albedo
+	m.roughness = rough
+	m.metallic = metal
+	if energy > 0.0:
+		m.emission_enabled = true
+		m.emission = emission
+		m.emission_energy_multiplier = energy
+	return m
+
+func _set_mesh_mat(root: Node, node_name: String, mat: Material) -> void:
+	var n := root.find_child(node_name, true, false) as MeshInstance3D
+	if n != null:
+		n.material_override = mat
+
 func update_coach(
 	dt: float,
 	body_frame: BodyFrame,
@@ -114,7 +155,8 @@ func update_coach(
 		global_position = target_world
 	else:
 		position = target_world
-	rotation.y = body_frame.get_godot_yaw_rad() + deg_to_rad(22.0)
+	# Angle +28 deg inward so the mascot faces directly toward the seated player
+	rotation.y = body_frame.get_godot_yaw_rad() + deg_to_rad(28.0)
 
 	# Check if either hand pokes/touches the mascot
 	var base_pos := global_position if is_inside_tree() else position
@@ -144,7 +186,7 @@ func trigger_poke_reaction(hand: int) -> void:
 func set_demo_mechanic(mechanic_id: int) -> void:
 	active_demo_mechanic = mechanic_id
 	if _speech_label != null:
-		_speech_label.text = "Coach Demo:\n%s" % ZenoEnums.get_mechanic_title(mechanic_id)
+		_speech_label.text = "Coach Demo:\n%s" % ZenoEnums.get_mechanic_title(mechanic_id).split("(")[0].strip_edges()
 
 func _on_mascot_demo_requested(mechanic_id: int) -> void:
 	set_demo_mechanic(mechanic_id)
@@ -157,7 +199,7 @@ func _animate_joints() -> void:
 	if _left_shoulder_pivot == null or _right_shoulder_pivot == null or _neck_pivot == null or _visual_root == null:
 		return
 
-	_visual_root.rotation = Vector3(0.0, PI, 0.0)
+	_visual_root.rotation = Vector3.ZERO
 	_left_shoulder_pivot.rotation = Vector3.ZERO
 	_right_shoulder_pivot.rotation = Vector3.ZERO
 	_neck_pivot.rotation = Vector3.ZERO
@@ -172,7 +214,7 @@ func _animate_joints() -> void:
 	var t := _anim_time
 	match active_demo_mechanic:
 		ZenoEnums.MechanicId.M01_ASTEROID_BRAWLER:
-			# Alternating forward punches
+			# Alternating forward punches (+Z is mascot front -> -X rotation lifts arm forward)
 			_left_shoulder_pivot.rotation.x = deg_to_rad(-75.0 * maxf(0.0, sin(t * 4.0)))
 			_right_shoulder_pivot.rotation.x = deg_to_rad(-75.0 * maxf(0.0, -sin(t * 4.0)))
 		ZenoEnums.MechanicId.M02_FRUIT_HARVESTER:
@@ -187,7 +229,7 @@ func _animate_joints() -> void:
 			# Hands at chest + trunk twist
 			_left_shoulder_pivot.rotation.x = deg_to_rad(-65.0)
 			_right_shoulder_pivot.rotation.x = deg_to_rad(-65.0)
-			_visual_root.rotation.y = PI + deg_to_rad(sin(t * 2.0) * 38.0)
+			_visual_root.rotation.y = deg_to_rad(sin(t * 2.0) * 38.0)
 		ZenoEnums.MechanicId.M05_COSMIC_TUG_OF_WAR:
 			# Rowing pull motion
 			var row_angle := deg_to_rad(-45.0 - 45.0 * sin(t * 2.8))

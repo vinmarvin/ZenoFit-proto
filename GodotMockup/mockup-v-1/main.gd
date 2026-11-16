@@ -36,6 +36,7 @@ var _prev_head_yaw_deg: float = 0.0
 var _sim_left_depth_m: float = 0.45
 var _sim_right_depth_m: float = 0.45
 var _sim_wrist_roll_deg: float = 0.0
+var _has_initial_xr_pose: bool = false
 
 func _ready() -> void:
 	Platform.initialize_platform()
@@ -145,13 +146,26 @@ func _rebuild_body_frame_from_camera() -> void:
 		xr_camera.global_transform.basis,
 		GameFlow.profile.chest_offset_from_head_m
 	)
+	if Platform.is_xr_active:
+		var fwd_y := (-xr_camera.global_transform.basis.z).y
+		GameFlow.body_frame.origin_spec.y = xr_camera.global_position.y + fwd_y * 0.55 - 0.10
 	GameFlow.seat_anchor_local_spec = GameFlow.body_frame.from_godot_world(xr_camera.global_position)
 	calibration_ctrl.current_body_frame = GameFlow.body_frame
 	calibration_ctrl.seat_anchor_local_spec = GameFlow.seat_anchor_local_spec
 
 func _process(delta: float) -> void:
 	_handle_desktop_simulator_input(delta)
+	_sync_xr_camera_body_frame()
 	_update_tracked_poses(delta)
+
+	if Platform.is_xr_active:
+		if left_tip_visual != null:
+			left_tip_visual.visible = left_controller.get_has_tracking_data()
+		if right_tip_visual != null:
+			right_tip_visual.visible = right_controller.get_has_tracking_data()
+
+	if floor_platform != null:
+		floor_platform.global_position = GameFlow.body_frame.to_godot_world(Vector3(0.0, -0.68, 0.0))
 
 	GameFlow.advance_round_timer(delta)
 
@@ -166,6 +180,9 @@ func _process(delta: float) -> void:
 			var head_speed_deg_s := absf(head_yaw_deg - _prev_head_yaw_deg) / maxf(0.001, delta)
 			_prev_head_yaw_deg = head_yaw_deg
 
+			var left_roll := rad_to_deg(left_controller.rotation.z) if Platform.is_xr_active else _sim_wrist_roll_deg
+			var right_roll := rad_to_deg(right_controller.rotation.z) if Platform.is_xr_active else _sim_wrist_roll_deg
+
 			active_mechanic.update_mechanic(
 				delta,
 				head_local,
@@ -177,8 +194,8 @@ func _process(delta: float) -> void:
 				_prev_right_local_spec,
 				_curr_right_local_spec,
 				_get_smoothed_speed(_right_speeds),
-				_sim_wrist_roll_deg,
-				_sim_wrist_roll_deg
+				left_roll,
+				right_roll
 			)
 
 	mascot_coach.update_coach(
@@ -187,7 +204,32 @@ func _process(delta: float) -> void:
 		left_controller.global_position,
 		right_controller.global_position
 	)
-	world_ui.update_ui_display(GameFlow.body_frame, calibration_ctrl, active_mechanic)
+	world_ui.update_ui_display(
+		GameFlow.body_frame,
+		calibration_ctrl,
+		active_mechanic,
+		xr_camera.global_position,
+		-xr_camera.global_transform.basis.z,
+		delta
+	)
+
+func _sync_xr_camera_body_frame() -> void:
+	if not Platform.is_xr_active:
+		return
+	if not _has_initial_xr_pose and xr_camera.global_position.length_squared() > 0.0001:
+		_has_initial_xr_pose = true
+		_rebuild_body_frame_from_camera()
+		return
+	# In Main Menu or Calibration Step 1 (Seat Anchor), keep BodyFrame aligned with player eye height & gaze
+	if GameFlow.current_state == ZenoEnums.AppState.MAIN_MENU \
+		or (GameFlow.current_state == ZenoEnums.AppState.CALIBRATION and calibration_ctrl.current_step == ZenoEnums.CalibrationStep.SEAT_ANCHOR):
+		_rebuild_body_frame_from_camera()
+	else:
+		# Keep vertical chest height aligned with player eye-line
+		var fwd_y := (-xr_camera.global_transform.basis.z).y
+		var expected_chest_y := xr_camera.global_position.y + fwd_y * 0.55 - 0.10
+		if absf(expected_chest_y - GameFlow.body_frame.origin_spec.y) > 0.04:
+			GameFlow.body_frame.origin_spec.y = lerpf(GameFlow.body_frame.origin_spec.y, expected_chest_y, 0.18)
 
 func _update_tracked_poses(dt: float) -> void:
 	_prev_left_local_spec = _curr_left_local_spec
@@ -260,6 +302,8 @@ func _on_flow_state_changed(_prev: int, next_state: int) -> void:
 			active_mechanic = null
 
 func _on_round_started(_round_idx: int, mechanic_id: int) -> void:
+	if Platform.is_xr_active and _round_idx == 0:
+		_rebuild_body_frame_from_camera()
 	auto_pause_monitor.reset()
 	lean_monitor.reset()
 	active_mechanic = _instantiate_mechanic(mechanic_id)
@@ -304,6 +348,11 @@ func _on_xr_button_pressed(action_name: String, _hand: int) -> void:
 	elif action_name == "by_button":
 		if GameFlow.current_state == ZenoEnums.AppState.CALIBRATION:
 			_skip_calibration_step()
+		elif GameFlow.current_state == ZenoEnums.AppState.PAUSED and GameFlow.current_pause_reason == ZenoEnums.PauseReason.STABLE_CHAIR_CONFIRMATION:
+			GameFlow.decline_stable_chair_and_substitute()
+		elif GameFlow.current_state == ZenoEnums.AppState.MAIN_MENU or GameFlow.current_state == ZenoEnums.AppState.PAUSED or GameFlow.current_state == ZenoEnums.AppState.RESULTS:
+			_rebuild_body_frame_from_camera()
+			GameFlow.request_recalibrate()
 
 func _on_tracking_origin_recentered() -> void:
 	# GP-CAL-06 & AT-16: Pause game and ask for seat re-confirmation

@@ -1,7 +1,7 @@
 class_name ZenoWorldUI
 extends Node3D
 
-## World-Space 3D VR Panel (1.15 m ahead, 15-feedback-and-ui.md §9.3) + Desktop Simulator Canvas UI.
+## World-Space 3D VR Panel (Eye-Level HUD, 15-feedback-and-ui.md §9.3) + Desktop Simulator Canvas UI.
 ## Never makes health/treatment claims ("Not a medical device", §8.8, Rule 12).
 
 signal request_confirm_calibration_step()
@@ -16,6 +16,9 @@ var _canvas_layer: CanvasLayer
 var _status_label_2d: Label
 var _buttons_box: HBoxContainer
 var _mechanic_buttons_box: HFlowContainer
+var _hud_initialized: bool = false
+var _smoothed_pos: Vector3 = Vector3(0.0, 1.20, -1.22)
+var _smoothed_yaw_rad: float = 0.0
 
 func _ready() -> void:
 	_build_3d_board()
@@ -26,31 +29,37 @@ func _ready() -> void:
 func _build_3d_board() -> void:
 	var backing := MeshInstance3D.new()
 	var quad := BoxMesh.new()
-	quad.size = Vector3(1.45, 0.78, 0.02)
+	quad.size = Vector3(1.36, 0.66, 0.02)
 	backing.mesh = quad
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.08, 0.12, 0.18, 0.92)
+	mat.albedo_color = Color(0.07, 0.11, 0.17, 0.92)
 	mat.roughness = 0.8
 	backing.material_override = mat
 	add_child(backing)
 
 	_board_label = Label3D.new()
-	_board_label.position = Vector3(0.0, 0.12, 0.02)
-	_board_label.pixel_size = 0.0020
+	_board_label.position = Vector3(0.0, 0.11, 0.02)
+	_board_label.pixel_size = 0.0019
 	_board_label.font_size = 24
 	_board_label.outline_size = 6
+	_board_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_board_label.width = 650.0
 	_board_label.modulate = Color(0.95, 0.98, 1.0)
 	add_child(_board_label)
 
 	_sub_label = Label3D.new()
-	_sub_label.position = Vector3(0.0, -0.22, 0.02)
-	_sub_label.pixel_size = 0.0016
-	_sub_label.font_size = 20
-	_sub_label.modulate = Color(0.70, 0.88, 0.96)
+	_sub_label.position = Vector3(0.0, -0.17, 0.02)
+	_sub_label.pixel_size = 0.0017
+	_sub_label.font_size = 21
+	_sub_label.outline_size = 5
+	_sub_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_sub_label.width = 720.0
+	_sub_label.modulate = Color(0.72, 0.90, 0.98)
 	add_child(_sub_label)
 
 func _build_desktop_overlay() -> void:
 	_canvas_layer = CanvasLayer.new()
+	_canvas_layer.visible = not Platform.is_xr_active
 	add_child(_canvas_layer)
 
 	var panel := PanelContainer.new()
@@ -160,11 +169,48 @@ func _toggle_no_trunk() -> void:
 func update_ui_display(
 	body_frame: BodyFrame,
 	calibration_ctrl: CalibrationController,
-	active_mechanic: MechanicBase
+	active_mechanic: MechanicBase,
+	camera_world_pos: Vector3 = Vector3.ZERO,
+	camera_fwd_world: Vector3 = Vector3(0.0, 0.0, -1.0),
+	dt: float = 0.016
 ) -> void:
-	# Position 3D board at 1.15 m in front of chest, slightly below eye level (§9.3)
-	global_position = body_frame.to_godot_world(Vector3(0.0, 0.08, 1.15))
-	rotation.y = body_frame.get_godot_yaw_rad()
+	if _canvas_layer != null:
+		_canvas_layer.visible = not Platform.is_xr_active
+
+	# Position the 3D HUD Board directly along the player's 3D eye-line ray so it is ALWAYS centered in view
+	var gaze_dir := camera_fwd_world.normalized() if camera_fwd_world.length_squared() > 0.001 else Vector3(0.0, 0.0, -1.0)
+	var horiz_fwd := Vector3(gaze_dir.x, 0.0, gaze_dir.z)
+	if horiz_fwd.length_squared() < 0.001:
+		horiz_fwd = Vector3(0.0, 0.0, -1.0)
+	horiz_fwd = horiz_fwd.normalized()
+	var cam_yaw_rad := atan2(-horiz_fwd.x, -horiz_fwd.z)
+
+	var in_active_round := (
+		GameFlow.current_state == ZenoEnums.AppState.ROUND_INTRO
+		or GameFlow.current_state == ZenoEnums.AppState.ROUND_PLAY
+		or GameFlow.current_state == ZenoEnums.AppState.ROUND_OUTRO
+	)
+
+	var board_dist := 1.32 if in_active_round else 1.20
+	var board_y_offset := 0.22 if in_active_round else 0.0
+	var target_pos := camera_world_pos + gaze_dir * board_dist + Vector3(0.0, board_y_offset, 0.0)
+
+	if not _hud_initialized:
+		_smoothed_pos = target_pos
+		_smoothed_yaw_rad = cam_yaw_rad
+		_hud_initialized = true
+	else:
+		var follow_speed := 4.5 if in_active_round else 7.0
+		_smoothed_pos = _smoothed_pos.lerp(target_pos, clampf(dt * follow_speed, 0.0, 1.0))
+		_smoothed_yaw_rad = lerp_angle(_smoothed_yaw_rad, cam_yaw_rad, clampf(dt * follow_speed, 0.0, 1.0))
+
+	global_position = _smoothed_pos
+	var pitch_rad := asin(clampf(gaze_dir.y, -0.75, 0.75))
+	rotation = Vector3(
+		-pitch_rad + (deg_to_rad(8.0) if in_active_round else 0.0),
+		_smoothed_yaw_rad,
+		0.0
+	)
 
 	var preset := GameFlow.get_current_preset()
 	var no_trunk_str := "ON (Level A Only)" if bool(GameFlow.settings.get("no_trunk_mode", false)) else "OFF (All 10 Mechanics)"
@@ -182,11 +228,11 @@ func update_ui_display(
 				preset.preset_name, preset.reach_factor_k, hand_str, no_trunk_str,
 				"YES" if GameFlow.has_valid_calibration else "NO (Will Calibrate)"
 			]
-			_sub_label.text = "%s\nNotice: Not a medical device. Stop if anything hurts." % hist_line
+			_sub_label.text = "Press Trigger/A to Play | Press B/Y to Recalibrate\n%s — Not a medical device." % hist_line
 
 		ZenoEnums.AppState.CALIBRATION:
 			_board_label.text = "SEATED COMFORT CALIBRATION\n%s" % calibration_ctrl.get_step_instruction()
-			_sub_label.text = "Stop if it hurts. Only reach as far as is comfortable.\nObstacles marked: %d" % calibration_ctrl.working_profile.obstacles.size()
+			_sub_label.text = "Trigger/A = Confirm | B/Y = Skip | Obstacles: %d\nStop if it hurts. Only reach as far as is comfortable." % calibration_ctrl.working_profile.obstacles.size()
 
 		ZenoEnums.AppState.ROUND_INTRO:
 			var mech := GameFlow.get_current_mechanic_id()
@@ -225,7 +271,7 @@ func update_ui_display(
 				_board_label.text = "RESUMING IN %.1f s...\nSit comfortably in position." % GameFlow.resume_countdown_remaining_s
 			else:
 				_board_label.text = "PAUSED\n%s" % GameFlow.pause_message
-			_sub_label.text = "Passthrough: %s | Press Space to Resume or Esc for Menu" % ("ON" if Platform.passthrough_enabled else "Fallback Calm Scene")
+			_sub_label.text = "Trigger/A = Resume | B/Y = Recenter & Recalibrate"
 
 		ZenoEnums.AppState.RESULTS:
 			var areas: PackedStringArray = []
@@ -239,7 +285,7 @@ func update_ui_display(
 				GameFlow.session_elapsed_s,
 				GameFlow.adaptive_tempo.max_bpm_reached
 			]
-			_sub_label.text = "Body areas covered: %s\nSuggested next break in 60 min. (Not a medical device.)" % ", ".join(areas)
+			_sub_label.text = "Body areas covered: %s\nTrigger/A = Play Again | B/Y = Recalibrate (Not a medical device.)" % ", ".join(areas)
 
 	if _status_label_2d != null:
 		_status_label_2d.text = "[%s] %s  |  Shortcuts: Space=Confirm/Play, Tab=Auto-Hit, Q/E+Mouse=Move L/R Hand, L=Lap Pause, R=Recenter, M=Poke Mascot, Esc=Pause" % [

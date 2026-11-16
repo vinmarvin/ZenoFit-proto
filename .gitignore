@@ -43,8 +43,12 @@ ZenoFit/*.opendb
 ZenoFit/*.VC.db
 
 # ==========================================
-# OS & Editor Junk
+# OS, Debug Captures & Editor Junk
 # ==========================================
 .DS_Store
 Thumbs.db
 *.bak
+pico_debug.png
+pico_headset_ss.*
+*.mp4
+*.mkv
