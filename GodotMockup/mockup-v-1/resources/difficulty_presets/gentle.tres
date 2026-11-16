@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="DifficultyPreset" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://core/difficulty_preset.gd" id="1_preset"]
+
+[resource]
+script = ExtResource("1_preset")
+tier = 0
+preset_name = "Gentle"
+reach_factor_k = 0.6
+target_radius_m = 0.12
+start_tempo_bpm = 50.0
+max_tempo_bpm = 70.0
+target_lifetime_beats = 3
+m02_elevation_phi_deg = 35.0
+m03_abduction_theta_deg = 60.0
+m07_circle_radius_m = 0.12
+m07_cadence_hz = 0.5

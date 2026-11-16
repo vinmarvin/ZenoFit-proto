@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e5d2b3bfcb56dab4fa9dae7f8f1e4e6f, type: 3}
+  m_Name: Ex03_SideArmRaiseConfig
+  m_EditorClassIdentifier: 
+  _exerciseType: 2
+  _displayName: Side Arm Raise
+  _shortDescription: "Gentle lateral arm raises around the shoulder, capped safely
+    at 60\xB0 abduction."
+  _useAdaptiveTempo: 0
+  _adaptiveWindowSize: 8
+  _increaseTempoAccuracyThreshold: 0.85
+  _decreaseTempoAccuracyThreshold: 0.6
+  _tempoStepBpm: 5
+  _minTempoBpm: 40
+  _minAbductionAngleDeg: 20
+  _maxAbductionAngleDeg: 60
+  _tempoCapBpm: 60
+  _exclusionRadiusM: 0.12

@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="DifficultyPreset" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://core/difficulty_preset.gd" id="1_preset"]
+
+[resource]
+script = ExtResource("1_preset")
+tier = 2
+preset_name = "Active"
+reach_factor_k = 0.85
+target_radius_m = 0.08
+start_tempo_bpm = 70.0
+max_tempo_bpm = 90.0
+target_lifetime_beats = 2
+m02_elevation_phi_deg = 55.0
+m03_abduction_theta_deg = 90.0
+m07_circle_radius_m = 0.25
+m07_cadence_hz = 1.0

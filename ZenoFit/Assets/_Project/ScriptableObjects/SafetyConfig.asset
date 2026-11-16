@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: df9e64198b454ae43b5666e331686bd2, type: 3}
+  m_Name: SafetyConfig
+  m_EditorClassIdentifier: 
+  _lapRestDistanceM: 0.15
+  _lapRestHoldSeconds: 2
+  _restReminderIntervalMinutes: 8
+  _lateralLeanThresholdM: 0.2
+  _lateralLeanHoldSeconds: 0.5
+  _resumeCountdownSeconds: 3

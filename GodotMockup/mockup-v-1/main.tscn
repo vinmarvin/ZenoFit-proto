@@ -1,0 +1,14 @@
+[gd_scene format=3 uid="uid://qt7iuwjkmjia"]
+
+[ext_resource type="Script" uid="uid://c7mq6wsfyu8pj" path="res://main.gd" id="1_ig7tw"]
+
+[node name="XROrigin3D" type="XROrigin3D" unique_id=612095707]
+script = ExtResource("1_ig7tw")
+
+[node name="XRCamera3D" type="XRCamera3D" parent="." unique_id=370213209]
+
+[node name="LeftController" type="XRController3D" parent="." unique_id=2059375123]
+tracker = &"left_hand"
+
+[node name="RightController" type="XRController3D" parent="." unique_id=1811855231]
+tracker = &"right_hand"
