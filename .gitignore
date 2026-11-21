@@ -2,45 +2,15 @@
 .android-build-tools/
 
 # ==========================================
-# Godot 4.x (GodotMockup)
+# Godot 4.x (godot/)
 # ==========================================
-GodotMockup/**/.godot/
-GodotMockup/mockup-v-1/android/
-GodotMockup/mockup-v-1/build/
-GodotMockup/mockup-v-1/export_templates/
+godot/.godot/
+godot/android/
+godot/build/
+godot/export_templates/
 *.apk
 *.aab
 *.import.tmp
-
-# ==========================================
-# Unity (ZenoFit)
-# ==========================================
-ZenoFit/Library/
-ZenoFit/Temp/
-ZenoFit/Obj/
-ZenoFit/Build/
-ZenoFit/Builds/
-ZenoFit/Logs/
-ZenoFit/UserSettings/
-ZenoFit/MemoryCaptures/
-ZenoFit/Recordings/
-ZenoFit/.vs/
-ZenoFit/.vscode/
-ZenoFit/*.csproj
-ZenoFit/*.unityproj
-ZenoFit/*.sln
-ZenoFit/*.slnx
-ZenoFit/*.suo
-ZenoFit/*.tmp
-ZenoFit/*.user
-ZenoFit/*.userprefs
-ZenoFit/*.pidb
-ZenoFit/*.booproj
-ZenoFit/*.svd
-ZenoFit/*.pdb
-ZenoFit/*.mdb
-ZenoFit/*.opendb
-ZenoFit/*.VC.db
 
 # ==========================================
 # OS, Debug Captures & Editor Junk
