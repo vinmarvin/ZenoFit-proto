@@ -1,3 +1,6 @@
+> [!WARNING]
+> **DEPRECATED (Unity Build Removed in Commit `1dbc35c`):** ZenoFit is now **Godot 4.7 Only** (`godot/`). Do NOT use this Unity file for new code. Read **`03-godot-build.md`** and **`../AGENTS.md`** instead.
+
 # 01 — Tech Stack (Meta Quest, Unity build)
 
 > This file describes the **Unity** build (primary). The Godot test build is in `03-godot-build.md`. Both follow the same spec and the same acceptance tests.

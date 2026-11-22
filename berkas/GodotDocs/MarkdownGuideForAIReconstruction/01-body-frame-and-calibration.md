@@ -1,6 +1,13 @@
 # Body Frame and Calibration
 
-> Part of the spec pack (Meta Quest focus). **Section numbers are global across all gameplay files**, so a reference like §6.3 always means the same thing. See `00-gameplay-overview.md` for the index.
+> [!IMPORTANT]
+> **v0.4 Zen Dojo Arcade Revision (Godot 4.7 — Hybrid Hand Tracking + Controller):**
+> - Active implementation: `godot/core/body_frame.gd`, `godot/core/comfort_profile.gd`, `godot/calibration/calibration_controller.gd`.
+> - **Hybrid Confirmation:** Calibration steps accept **Hand Tracking Direct Poke / Pinch Hold (`0.8 s`)** OR **Controller `trigger_click`/`ax_button`**.
+> - **Returning User Quick Seat Check:** Target **<= 10 s** (1 confirm updates `SeatAnchor` & `BodyFrame` while preserving saved reach radii).
+> - **Chair Type Check (New final base step):** Ask *"Stable chair (no wheels/locked)?"* — choosing **Swivel / Rolling Chair** automatically enables **`No-Trunk Mode`** (`Level A` only) so users are not interrupted mid-session.
+
+> Part of the spec pack (Godot 4.7 · PICO 4 Ultra & Meta Quest). **Section numbers are global across all gameplay files**, so a reference like §6.3 always means the same thing. See `00-gameplay-overview.md` for the index.
 > Legend: **[S]** from source PDF · **[P]** proposal, tune in testing · **[V]** verify against vendor docs.
 
 ---
@@ -102,9 +109,9 @@ Some mechanics need one extra measurement. These run **the first time** the mech
 
 | Module | Needed by | Instruction | Captured |
 |---|---|---|---|
-| **Twist** | §6.4 Turret Gunner | Hold both controllers together at the chest. Turn left as far as comfortable, confirm. Then right. | `ψ_max,L`, `ψ_max,R` (yaw of the hands' midpoint in BodyFrame) |
-| **Neck** | §6.8 Recon Scanner | Turn the head left as far as comfortable, confirm. Then right. | `ψ_n,L`, `ψ_n,R` (head yaw) |
-| **Lean** | §6.10 Laser Evader | Hands on the rail, lean left as far as comfortable, confirm. Then right. | `Δx_max,L`, `Δx_max,R` (head lateral offset) |
+| **Twist** | §6.4 Bokken Guard | Hold both controllers together at the chest. Turn left as far as comfortable, confirm. Then right. | `ψ_max,L`, `ψ_max,R` (yaw of the hands' midpoint in BodyFrame) |
+| **Neck** | §6.8 Zen Horizon Watch | Turn the head left as far as comfortable, confirm. Then right. | `ψ_n,L`, `ψ_n,R` (head yaw) |
+| **Lean** | §6.10 Bamboo Sway | Hands on the rail, lean left as far as comfortable, confirm. Then right. | `Δx_max,L`, `Δx_max,R` (head lateral offset) |
 
 `GP-CAL-10` Module values are capped (twist 60°, lean 0.25 m target offset) regardless of what the user shows. Reminder text: "Stop if it hurts."
 `GP-CAL-11` **Returning-user quick check:** if a valid profile exists, the app only asks the user to sit comfortably and confirm (steps 1–2). Target ≤ 15 s **[P]** (survey: setup friction).

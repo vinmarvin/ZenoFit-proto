@@ -9,6 +9,7 @@ extends Node
 const ROUND_INTRO_SECONDS: float = 4.0
 const ROUND_PLAY_SECONDS: float = 30.0
 const ROUND_OUTRO_SECONDS: float = 2.0
+const WARMUP_SECONDS: float = 15.0
 const RESUME_COUNTDOWN_SECONDS: float = 3.0
 
 var current_state: int = ZenoEnums.AppState.BOOT
@@ -28,25 +29,36 @@ var settings: Dictionary = {
 	"haptics_enabled": true,
 	"haptic_intensity": 1.0,
 	"audio_volume": 0.8,
-	"rest_reminder_minutes": 8.0
+	"rest_reminder_minutes": 8.0,
+	"hud_distance_m": 1.35,
+	"mascot_high_quality": true
 }
 
-# Session & Score Attack state
+# Session, Routine Picker & Dojo Mastery state
 var is_practice_mode: bool = false
-var practice_mechanic_id: int = ZenoEnums.MechanicId.M01_ASTEROID_BRAWLER
+var practice_mechanic_id: int = ZenoEnums.MechanicId.M01_MAKIWARA_STRIKES
+var selected_routine: int = ZenoEnums.RoutineId.FULL_UPPER_DOJO
+var selected_duration_min: int = 6
+var enable_warmup: bool = false
+var has_used_routine_picker: bool = false
+var warmup_timer_s: float = 0.0
 var session_lineup: Array[int] = []
 var previous_session_lineup: Array[int] = []
-var current_round_index: int = 0 # 0..4
+var current_round_index: int = 0
 var round_timer_s: float = 0.0
 var session_elapsed_s: float = 0.0
 var stable_chair_confirmed_this_session: bool = false
+var breather_triggered_this_session: bool = false
 
 # Resume countdown (GP-FLOW-02)
 var is_resume_counting_down: bool = false
 var resume_countdown_remaining_s: float = 0.0
 
-# Scoring & results
+# Scoring, Rank & Personal Best
 var session_score: int = 0
+var last_session_rank: String = "C"
+var is_new_personal_best: bool = false
+var personal_best_score: int = 0
 var round_scores: Array[int] = []
 var covered_groups: Array[int] = []
 var round_tracker: ZenoScoring.RoundScoreTracker = ZenoScoring.RoundScoreTracker.new()
@@ -90,12 +102,50 @@ func get_current_preset() -> DifficultyPreset:
 	var tier := int(settings.get("difficulty", ZenoEnums.DifficultyTier.STANDARD))
 	return DifficultyPreset.create_for_tier(tier)
 
+func adjust_hud_distance(delta_m: float) -> float:
+	var curr := float(settings.get("hud_distance_m", 1.35))
+	var updated := clampf(curr + delta_m, 0.90, 2.00)
+	settings["hud_distance_m"] = updated
+	_get_save_service().save_settings(settings)
+	return updated
+
 func get_current_mechanic_id() -> int:
 	if is_practice_mode:
 		return practice_mechanic_id
 	if current_round_index >= 0 and current_round_index < session_lineup.size():
 		return session_lineup[current_round_index]
-	return ZenoEnums.MechanicId.M01_ASTEROID_BRAWLER
+	return ZenoEnums.MechanicId.M01_MAKIWARA_STRIKES
+
+func open_routine_picker_from_menu() -> void:
+	_transition_to(ZenoEnums.AppState.ROUTINE_PICKER)
+
+func open_credits() -> void:
+	_transition_to(ZenoEnums.AppState.CREDITS)
+
+func quit_application() -> void:
+	if is_inside_tree():
+		get_tree().quit()
+
+func select_routine_and_start(routine_id: int, duration_min: int = 6, with_warmup: bool = false) -> void:
+	is_practice_mode = false
+	has_used_routine_picker = true
+	selected_routine = routine_id
+	selected_duration_min = duration_min
+	enable_warmup = with_warmup
+	if not has_valid_calibration:
+		_transition_to(ZenoEnums.AppState.CALIBRATION)
+	elif enable_warmup:
+		start_warmup()
+	else:
+		begin_session()
+
+func start_warmup() -> void:
+	warmup_timer_s = WARMUP_SECONDS
+	_transition_to(ZenoEnums.AppState.WARM_UP)
+
+func skip_warmup() -> void:
+	if current_state == ZenoEnums.AppState.WARM_UP:
+		begin_session()
 
 func start_score_attack_from_menu() -> void:
 	is_practice_mode = false
@@ -115,16 +165,27 @@ func start_practice_mechanic(mechanic_id: int) -> void:
 func request_recalibrate() -> void:
 	_transition_to(ZenoEnums.AppState.CALIBRATION)
 
-func on_calibration_finished(new_profile: ComfortProfile, new_body_frame: BodyFrame, new_seat_anchor: Vector3) -> void:
+func on_calibration_finished(
+	new_profile: ComfortProfile,
+	new_body_frame: BodyFrame,
+	new_seat_anchor: Vector3,
+	swivel_chair: bool = false
+) -> void:
 	profile = new_profile
 	body_frame = new_body_frame
 	seat_anchor_local_spec = new_seat_anchor
 	has_valid_calibration = true
 	settings["hand_mode"] = profile.get_effective_hand_mode(int(settings.get("hand_mode", ZenoEnums.HandMode.BOTH_HANDS)))
+	settings["chair_is_swivel"] = swivel_chair
+	if swivel_chair:
+		settings["no_trunk_mode"] = true
 	var svc := _get_save_service()
 	svc.save_calibration_profile(profile)
 	svc.save_settings(settings)
-	begin_session()
+	if enable_warmup and not is_practice_mode:
+		start_warmup()
+	else:
+		begin_session()
 
 func begin_session() -> void:
 	_transition_to(ZenoEnums.AppState.SESSION_START)
@@ -132,21 +193,35 @@ func begin_session() -> void:
 	adaptive_tempo = AdaptiveTempo.new(preset.start_tempo_bpm, preset.max_tempo_bpm)
 	round_tracker.reset()
 	session_score = 0
+	last_session_rank = "C"
+	is_new_personal_best = false
 	round_scores.clear()
 	covered_groups.clear()
 	session_elapsed_s = 0.0
 	current_round_index = 0
 	stable_chair_confirmed_this_session = false
+	breather_triggered_this_session = false
 
 	if is_practice_mode:
 		session_lineup = [practice_mechanic_id]
 	else:
-		var no_trunk := bool(settings.get("no_trunk_mode", false))
-		var full_draw := SessionDraw.draw_five_mechanics(no_trunk, previous_session_lineup)
+		var no_trunk := bool(settings.get("no_trunk_mode", false)) or bool(settings.get("chair_is_swivel", false))
 		if bool(settings.get("quick_session_one_round", false)):
-			session_lineup = [full_draw[0]]
+			var single := SessionDraw.draw_five_mechanics(no_trunk, previous_session_lineup)
+			session_lineup = [single[0]]
+		elif has_used_routine_picker:
+			var target_rounds := 5
+			if selected_duration_min <= 3:
+				target_rounds = 3
+			elif selected_duration_min >= 10:
+				target_rounds = 7
+			elif selected_routine == ZenoEnums.RoutineId.SHOULDER_NECK_REFRESH:
+				target_rounds = 3
+			elif selected_routine == ZenoEnums.RoutineId.POSTURE_MOBILITY_FLOW:
+				target_rounds = 4
+			session_lineup = SessionDraw.draw_for_routine(selected_routine, no_trunk, previous_session_lineup, null, target_rounds)
 		else:
-			session_lineup = full_draw
+			session_lineup = SessionDraw.draw_five_mechanics(no_trunk, previous_session_lineup)
 		previous_session_lineup = session_lineup.duplicate()
 
 	_enter_round_intro(0)
@@ -189,9 +264,23 @@ func decline_stable_chair_and_substitute() -> int:
 		eb.mascot_demo_requested.emit(new_mech)
 	return new_mech
 
+func get_active_round_play_seconds() -> float:
+	if has_used_routine_picker and not is_practice_mode:
+		if selected_duration_min >= 10:
+			return 45.0
+		elif selected_duration_min == 6:
+			return 35.0
+	return ROUND_PLAY_SECONDS
+
 func advance_round_timer(dt: float) -> void:
 	var eb := _get_event_bus()
 	var plat := _get_platform()
+	if current_state == ZenoEnums.AppState.WARM_UP:
+		warmup_timer_s -= dt
+		if warmup_timer_s <= 0.0:
+			begin_session()
+		return
+
 	if current_state == ZenoEnums.AppState.PAUSED:
 		if is_resume_counting_down:
 			resume_countdown_remaining_s -= dt
@@ -208,7 +297,7 @@ func advance_round_timer(dt: float) -> void:
 	if current_state == ZenoEnums.AppState.ROUND_INTRO:
 		round_timer_s -= dt
 		if round_timer_s <= 0.0:
-			round_timer_s = ROUND_PLAY_SECONDS
+			round_timer_s = get_active_round_play_seconds()
 			_transition_to(ZenoEnums.AppState.ROUND_PLAY)
 			if eb != null:
 				eb.round_started.emit(current_round_index, get_current_mechanic_id())
@@ -223,7 +312,12 @@ func advance_round_timer(dt: float) -> void:
 		round_timer_s -= dt
 		if round_timer_s <= 0.0:
 			if current_round_index + 1 < session_lineup.size():
-				_enter_round_intro(current_round_index + 1)
+				var next_idx := current_round_index + 1
+				_enter_round_intro(next_idx)
+				# 10-minute Extended Session midpoint Zen Breather pause
+				if has_used_routine_picker and selected_duration_min >= 10 and not is_practice_mode and not breather_triggered_this_session and next_idx >= int(session_lineup.size() / 2):
+					breather_triggered_this_session = true
+					pause_session(ZenoEnums.PauseReason.REST_REMINDER, "Zen Breather (Mid-Session Rest): Relax your shoulders, take two calm breaths, and click Resume when ready.")
 			else:
 				finish_session_to_results()
 
@@ -274,20 +368,29 @@ func finish_session_to_results() -> void:
 	if plat != null:
 		plat.set_passthrough(false)
 	session_score = round_tracker.combo_total_score
+	var acc := round_tracker.get_accuracy_percent()
+	last_session_rank = ZenoScoring.compute_dojo_rank(acc)
+	var svc := _get_save_service()
+	var pb_res := svc.update_personal_best(selected_routine, selected_duration_min, session_score, acc, last_session_rank)
+	is_new_personal_best = bool(pb_res.get("is_new_best", false))
+	personal_best_score = int(pb_res.get("new_best", session_score))
 	var record := {
 		"dateUtc": Time.get_datetime_string_from_system(true) + "Z",
-		"mode": "Practice" if is_practice_mode else "ScoreAttack",
+		"mode": "Practice" if is_practice_mode else ZenoEnums.get_routine_title(selected_routine),
+		"durationMin": selected_duration_min,
 		"mechanicsCount": session_lineup.size(),
 		"difficulty": get_current_preset().preset_name,
 		"handMode": int(settings.get("hand_mode", ZenoEnums.HandMode.BOTH_HANDS)),
 		"durationSeconds": snappedf(session_elapsed_s, 0.1),
 		"hits": round_tracker.hits,
 		"misses": round_tracker.misses,
-		"accuracyPercent": snappedf(round_tracker.get_accuracy_percent(), 0.1),
+		"accuracyPercent": snappedf(acc, 0.1),
 		"score": session_score,
+		"rank": last_session_rank,
+		"isNewPersonalBest": is_new_personal_best,
 		"maxTempoReachedBpm": adaptive_tempo.max_bpm_reached
 	}
-	_get_save_service().append_session_record(record, 10)
+	svc.append_session_record(record, 10)
 	_transition_to(ZenoEnums.AppState.RESULTS)
 
 func return_to_main_menu() -> void:

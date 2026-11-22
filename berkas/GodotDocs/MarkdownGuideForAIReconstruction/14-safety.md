@@ -1,71 +1,65 @@
-# Safety System
+# Safety System (v0.4 — Hybrid Hand Tracking & Zen Dojo)
 
-> Part of the spec pack (Meta Quest focus). **Section numbers are global across all gameplay files**, so a reference like §6.3 always means the same thing. See `00-gameplay-overview.md` for the index.
-> Legend: **[S]** from source PDF · **[P]** proposal, tune in testing · **[V]** verify against vendor docs.
+> Part of the **ZenoFit AI Reconstruction Spec Pack (Godot 4.7)**. **Section numbers are global across all gameplay files**. See `00-gameplay-overview.md` for the index.
+> Legend: **[S]** source/research · **[D]** locked team decision · **[P]** tunable default · **[V]** verify on hardware.
 
 ---
 
-## 8. Safety system `GP-SAFE-*` **[S]**
+## 8. Safety system `GP-SAFE-*` **[S][D]**
 
-### 8.1 Auto-pause when hands rest in the lap
+### 8.1 Auto-pause when hands rest in the lap (`AT-09`)
+```text
+lapDistance(hand) = |handTip - LapPoint|
+if both hands have lapDistance <= 0.15 m for >= 2.0 s -> Pause + Passthrough
 ```
-lapDistance(hand) = |handTip − LapPoint|
-if both hands have lapDistance ≤ 0.15 m for ≥ 2.0 s → Pause + passthrough [P distance, S time]
-```
-**Simple problem.** The calibrated `LapPoint` is 0.45 m below the chest. Both hands move to within 0.12 m of that point and stay for 2.0 s. `0.12 ≤ 0.15` and `2.0 ≥ 2.0` → the game freezes and passthrough opens (or the fallback pause scene shows).
-- If `SupportsPassthrough = false`, show the fallback scene: a static calm scene with the "Resume / Stop" panel.
+- **Hand-Tracking Camera FoV Fallback (`GP-SAFE-HT-01`) [D]:** When optical Hand Tracking is active, lowering both hands to the lap may cause hands to exit the headset camera's downward FoV (`is_tracked == false`). If both hands were last observed moving downward in the lower zone (`y <= -0.25 m` in BodyFrame) and then lose tracking continuously for `>= 2.0 s`, `AutoPauseMonitor` MUST still trigger `AUTO_PAUSE_LAP` + `Platform.set_passthrough(true)`.
+- If `Platform.supports_passthrough() == false`, display the calm Zen Dojo pause scene with *Resume / Stop*.
 
-### 8.2 Manual pause / stop
-- The controller **menu button** pauses at any time. A big, always-reachable *Stop* is on the pause panel.
-- The pause panel is positioned at a comfortable distance (≈ 1.0 m ahead, at eye level, slightly below) and uses a **ray pointer** or a dwell/touch-friendly large button. **[P]**
+### 8.2 Manual pause / stop (`AT-14`)
+- **Controller mode:** `menu_button` pauses within 1 frame and freezes beat/round timers.
+- **Hand Tracking mode:** Open palm-up hold (`1.5 s` facing headset) or tapping a persistent corner *Pause* badge pauses within 1 frame.
+- Resume ALWAYS runs a **`3.0 s` countdown** (`GP-FLOW-02`).
 
-### 8.3 Rest reminder
-Every **8 minutes** [P; range 7–10 **[S]**]: auto-pause, show a "Relax your shoulders and neck" message (headset weight, about 500 g **[S]**), resume when the user confirms.
+### 8.3 Rest reminder & Extended-session Zen Breather
+- **Continuous play timer:** Every **8 minutes** [P; range 7–10 **[S]**] of active play, auto-pause and show *"Relax your shoulders and neck from the headset weight."*
+- **Extended sessions (`6 min` / `10 min`):** Automatically insert a **`20–30 s` Zen Breather (Passthrough ON)** between 5-round stages to mitigate neck load (~500 g headset) and peripheral/sopite motion sickness (Xu et al., 2020).
 
-### 8.4 Lean / balance warning `GP-SAFE-LEAN-01` **[P]** (applies to Level A mechanics; Level B mechanics set their own limits, §6.4 and §6.10)
-Lateral lean: `Δx = x_head − x_SeatAnchor` (in BodyFrame). If `|Δx| > 0.20 m` for ≥ 0.5 s → soft pause + message "Please sit back in a stable position."
-**Simple problem.** Δx = 0.12 m → no warning. Δx = 0.22 m for 0.6 s → warning.
-This addresses the reported risk of users tilting toward virtual motion and falling from a chair. **[S]** (The app has no virtual motion at all, per G4, so this is a second safety layer.)
+### 8.4 Lean / balance warning `GP-SAFE-LEAN-01` (`AT-10`)
+- Lateral lean: `Δx = x_head - x_SeatAnchor` (BodyFrame).
+- **Level A mechanics:** If `|Δx| > 0.20 m` for `>= 0.5 s` → soft pause + *"Please sit back in a stable position."*
+- **M10 Bamboo Sway (`Level B`):** Overrides threshold to `min(|Δx_max| + 0.05, 0.30) m`.
 
-### 8.5 Reach and angle guards
-- Targets: `k ≤ 0.85` (§4.3). Glider Pilot `θ ≤ 90°` (§6.3). Module caps: twist 60°, lean 0.25 m (§4.7).
-- No target may require standing, leaning, or crossing outside the BodyFrame envelope.
+### 8.5 Reach, Scapular Plane, & Angle Guards
+- Reach factor hard cap: `k <= 0.85` (`ComfortProfile.MAX_REACH_FACTOR_K`).
+- **Scapular plane (`M03`):** Position lateral wings `15°–30°` forward of the side plane to protect the shoulder joint and keep optical hand tracking inside camera FoV.
+- Module caps: `M04` twist `<= 60°`, `M08` neck yaw `<= 65°` & speed `<= 60 deg/s`, `M10` lean gap `<= 0.25 m`.
 
-### 8.6 Visual comfort (cybersickness) `GP-COMFORT-01` **[S]**
-- Camera = fixed anchor. No smooth camera motion, no moving environment that suggests self-motion.
-- If background motion exists, add static reference elements (e.g. a fixed floor/cockpit).
-- Calm lighting; high contrast for readability.
+### 8.6 Visual comfort (cybersickness) `GP-COMFORT-01` **[S][D]**
+- Fixed seated camera (`XROrigin3D` never translates, rotates, or rolls during gameplay).
+- **Zen Dojo static reference frame:** Tatami grid lines, wooden pillars, and shoji frames stay completely stationary to anchor spatial orientation and minimize peripheral/sopite sickness (Flatlandsmo, 2023; Xu et al., 2020).
+- Maintain locked **72–90 FPS** (see `03-godot-build.md` §5 render budget).
 
-### 8.7 Deferred (documented, not built)
-Heart-rate integration and the HR safety cut-off. For reference only, using the PDF's formula (unverified **[V]**): `HRpeak = 220 − age − 20`. **Simple problem:** age 30 → `220 − 30 − 20 = 170 bpm`; the moderate zone 75 %–86 % → `0.75 × 170 = 127.5 bpm` to `0.86 × 170 = 146.2 bpm`.
+### 8.7 Mechanic Safety Levels, Chair Check, & No-Trunk Mode `GP-SAFE-LVL-01` (`AT-26`, `AT-28`)
 
-### 8.8 Mechanic safety levels, stable chair, No-trunk mode `GP-SAFE-LVL-01` **[P]**
-
-| Level | Meaning | Mechanics | Extra rules |
+| Level | Meaning | Mechanics | Extra Rules |
 |---|---|---|---|
-| **A** | Arms only | §6.1, 6.2, 6.3, 6.5, 6.6, 6.7, 6.9 | Generic lean warning (§8.4) active. |
-| **B** | Trunk or neck movement | §6.4, 6.8, 6.10 | Stable-chair confirmation; own calibration module (§4.7); own limits; lean warning replaced by the mechanic's limit. |
+| **A** | Arms only | `M01, M02, M03, M05, M06, M07, M09` | Generic lean warning (`0.20 m`) active; speed/timeliness scoring allowed. |
+| **B** | Trunk or neck | `M04, M08, M10` | Requires stable chair; **precision/smoothness scoring ONLY** (no speed bonus); never consecutive in a draw. |
 
-- **Stable-chair confirmation:** before the first Level B round of a session, show "Sit on a stable chair (no wheels, or locked). Keep both feet on the floor. Stop if you feel pain or dizzy." with a *Continue* button.
-- **No-trunk mode** (Settings): excludes all Level B mechanics from the draw. The user can still play Score Attack.
-- **Desk safety:** obstacle marking (§4.2 step 7) covers desk edge, keyboard, monitor, and armrests. Targets never spawn inside exclusion zones (§4.5).
-- **Notice at first launch:** "Not a medical device. Stop if anything hurts. If you have neck, shoulder, or back conditions, ask a professional before using." **[S]**
-- Each Level B round lasts max 30 s with no consecutive Level B rounds in the draw **[P]**.
+- **Chair Type Check during Calibration [D]:** Ask *"Sitting on a stable chair (no wheels / locked)?"* Selecting **Swivel / Rolling Chair** automatically enables **`No-Trunk Mode`** (`Level A` only).
+- **Mid-Session Stable-Chair Gate (`AT-28`):** If not confirmed yet before the first `Level B` round, pause and prompt; declining substitutes an unused `Level A` mechanic.
+- **First-Launch Non-Medical Notice:** *"ZenoFit is an active-break VR game, not a medical device. Stay seated, move within your comfort, and stop immediately if anything hurts or feels dizzy."*
 
 ---
 
-## Tunables (edit "Your value" to be more specific)
+## Tunables
 
-| Parameter | Default | Your value |
-|---|---|---|
-| Lap-rest distance | 0.15 m **[P]** | |
-| Lap-rest hold time | 2.0 s **[S]** | |
-| Rest reminder interval | 8 min (range 7–10 **[S]**) | |
-| Lean threshold (lateral) | 0.20 m for 0.5 s **[P]** | |
-| Resume countdown | 3 s **[P]** | |
-| Max reach factor | 0.85 **[S]** | |
-
-## Open questions
-
-1. Who reviews the safety defaults (physiotherapist/clinician) before user tests?
-2. Should the app show a one-time safety notice ("not a medical device") at first launch?
+| Parameter | Default |
+|---|---|
+| Lap-rest distance / hold time | `0.15 m` / `2.0 s` **[P][S]** |
+| Hand-tracking FoV drop-to-lap timeout | `2.0 s` after last `y <= -0.25 m` **[P]** |
+| Rest reminder interval | `8 min` (range `7–10`) **[P][S]** |
+| Extended Zen Breather duration | `20 s` (`6 min`) / `30 s` (`10 min`) **[P]** |
+| Lateral lean threshold (Level A) | `0.20 m` for `0.5 s` **[P]** |
+| Resume countdown | `3.0 s` **[P]** |
+| Max reach factor `k` | `0.85` **[S]** |

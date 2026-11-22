@@ -1,16 +1,16 @@
-# ZenoFit — Seated VR Fitness for Desk Workers: Spec Pack (Meta Quest)
+# ZenoFit — Seated VR Zen Dojo Arcade: AI Reconstruction Spec Pack (Godot 4.7)
 
-> **Version:** 0.3 (draft) · **Date:** 2026-11-15 · **Owner:** Ryan
-> This pack defines *what* we build and *how it is configured*. If code and spec disagree, fix one of them and record it in the changelog at the bottom.
+> **Version:** 0.4 (Aligned for Week 14 Playtest) · **Date:** 2026-11-22 · **Engine:** Godot 4.7 Only
+> **Scope:** This pack is the **Single Source of Truth** for AI coding assistants revising `godot/`. If code and spec disagree, update the code to match v0.4 (or flag an explicit spec question).
 
 **Legend used in every file**
 
 | Tag | Meaning |
 |---|---|
-| **[S]** | From the source PDF or from research. |
-| **[D]** | From your ZenoFit design draft. |
-| **[P]** | Proposal by the spec author. A sensible default to *start* with. Tune it in testing. |
-| **[V]** | Vendor/version-dependent. Verify against current Unity / Godot / Meta docs before relying on it. |
+| **[S]** | From source PDFs or empirical research (WHO, SKI 2023, Xu et al. 2020, Flatlandsmo 2023, Moffitt 2024). |
+| **[D]** | Locked ZenoFit team design decision (PM, Architect, UI, UX Research). |
+| **[P]** | Sensible default tunable (`Resource` / `@export`). Tune during Week 14 playtesting. |
+| **[V]** | Vendor/version-dependent. Verify on real **PICO 4 Ultra** and **Meta Quest 3**. |
 | **MUST / SHOULD / MAY** | Requirement strength. |
 
 ---
@@ -19,162 +19,80 @@
 
 | File | Read it when you need to... |
 |---|---|
-| `00-README.md` (this file) | Understand scope, decisions, risks, and the rules for AI assistants. |
-| `01-techstack.md` | Unity build: version, packages, folder structure, conventions. |
-| `02-quest-config.md` | Configure Unity for Quest 2/3/3S, build, run, and test (including **without a headset**). |
-| `03-godot-build.md` | Build the **second (Godot) version** for A/B testing: concept map, setup, parity matrix, comparison plan. |
-| `04-workspace-and-antigravity.md` | Folder layout, `AGENTS.md` templates, and the task list for your Antigravity agent. |
-| `research/01-survey-analysis.md` | What the ZenoFit survey says (and does not say), and how it changed the design. |
-| `gameplay/` | Implement the game. One file per topic (index below). |
-
-### Gameplay files (`gameplay/`)
-
-**Section numbers are global across the gameplay files**, so "§6.3" always means Side Arm Raise (Glider Pilot).
-
-| File | Section(s) |
-|---|---|
-| `00-gameplay-overview.md` | §1 goals · §2 app flow · §5 Score Attack session, difficulty, hand mode · §6 mechanics table · §11 build order · §12 out of scope |
-| `01-body-frame-and-calibration.md` | §3 BodyFrame · §4 calibration (base steps, module calibrations) |
-| `02-targets-and-hit-detection.md` | §6.A shared rules · §6.B adaptive tempo · §6.C hit detection |
-| `03-m01-asteroid-brawler.md` | §6.1 Seated Boxing |
-| `04-m02-fruit-harvester.md` | §6.2 Overhead Reach |
-| `05-m03-glider-pilot.md` | §6.3 Side Arm Raise |
-| `06-m04-turret-gunner.md` | §6.4 Trunk Twist |
-| `07-m05-cosmic-tug-of-war.md` | §6.5 Seated Row |
-| `08-m06-force-blast.md` | §6.6 Forward Press |
-| `09-m07-shield-generator-crank.md` | §6.7 Arm Circles |
-| `10-m08-recon-scanner.md` | §6.8 Neck Mobility and Far Focus |
-| `11-m09-potion-brewer.md` | §6.9 Elbow Flexion and Wrist Pour |
-| `12-m10-laser-evader.md` | §6.10 Overhead Reach with Side Bend |
-| `13-scoring-and-score-attack.md` | §7 |
-| `14-safety.md` | §8 |
-| `15-feedback-and-ui.md` | §9 |
-| `16-acceptance-tests.md` | §10 |
-
-**Making it more specific:** each mechanic file ends with a **Tunables** table and **Open questions**. Fill in "Your value" and answer the questions; the **[P]** defaults then become decisions.
-
-Reading order for a human: `00 → research/01 → gameplay/00 → gameplay/01 → the mechanic you are building`. For an AI assistant: section 5.
+| `../AGENTS.md` | Hard AI build rules, render budget, anti-cheat rules, and test command. |
+| `00-README.md` (this file) | Scope, locked decisions (`D-01`–`D-19`), risks, and AI coding rules. |
+| `03-godot-build.md` | **Active Godot 4.7 build guide:** multi-platform PICO 4 Ultra & Meta Quest 3, OpenXR Hand Tracking + Controller hybrid setup, render budget, and SpecSpace traps. |
+| `04-workspace-and-antigravity.md` | Repository layout (`berkas/`, `godot/`, `asset/`) and copy-paste AI revision tasks for the 2-week Week 14 sprint. |
+| `01-survey-analysis.md` | Survey findings (`N = 8`, anonymized in `berkas/Ideation/Jaras Pengguna.csv`) and design implications. |
+| `01-techstack.md` / `02-quest-config.md` | **[DEPRECATED — Unity removed.]** Kept for historical reference only. Use `03-godot-build.md`. |
+| `00-gameplay-overview.md` | §1 goals · §2 Player Flow (Main Menu, Routine Picker, Warm-Up) · §5 Score Attack & 3 Routines · §6 Zen Dojo 10-mechanic table · §11 Week 14 sprint plan · §12 out of scope. |
+| `01-body-frame-and-calibration.md` | §3 BodyFrame · §4 calibration (base steps, quick seat check `<= 10 s`, chair check, Level B modules). |
+| `02-targets-and-hit-detection.md` | §6.A shared rules · §6.B adaptive tempo · §6.C segment hit detection · **§6.D Anti-Raycast & Anti-Cheat rules**. |
+| `03-m01` … `12-m10` | Individual specs for all 10 Zen Dojo mechanics (`M01`–`M10`), including v0.4 Dojo reskin + anti-cheat fixes. |
+| `13-scoring-and-score-attack.md` | §7 scoring, combo (`1.0x–2.0x`), **Dojo Mastery Rank (`C/B/A/S/Zen Master`) + Personal Best** (no belt progression), Level A vs. B scoring rule. |
+| `14-safety.md` | §8 safety monitors (Hand-tracking lap auto-pause fallback, lean warning, rest reminder, No-Trunk mode, scapular plane). |
+| `15-feedback-and-ui.md` | §9 hybrid haptics + **Dojo Audio/Visual Arcade Juice** (for controller-free Hand Tracking), UI screens (`Play/Settings/Credits/Quit`, Routine Picker), Zeno mascot limits. |
+| `16-acceptance-tests.md` | §10 automated acceptance tests (`AT-01`–`AT-28` preserved + **`AT-29`–`AT-35`** for anti-cheat, 3 Routines, and Rank/PB). |
 
 ---
 
 ## 2. Product summary
 
-**ZenoFit** is a seated VR game for **desk-working gamers and students** on **Meta Quest**. In a 3-minute **Score Attack** session (5 rounds × 30 s), the player performs simple upper-body stretches disguised as short games: punching asteroids, harvesting fruit, gliding through rings, cranking a shield, and more. Targets are placed inside the player's **own calibrated comfortable range**. **[D]**
+**ZenoFit** is a standalone **seated upper-body VR Arcade Score Attack game** set inside a calm **Zen Dojo**, designed for **desk-working university students, gamers, and developers ("lazy couch geeks")** on **PICO 4 Ultra** and **Meta Quest 2 / 3 / 3S**. **[D]**
 
-**Ten mechanics [D]:** Seated Boxing · Overhead Reach · Side Arm Raise · Trunk Twist · Seated Row · Forward Press · Arm Circles · Neck Mobility and Far Focus · Elbow Flexion (with wrist pour) · Overhead Reach with Side Bend. (Replaces the earlier five movements of the accessibility PDF.)
-
-**Core loop [D]:** sit down → quick seat check → 3-minute randomized Score Attack → results → repeat for a higher score.
-
-**Constraints [D]:** VR, seated only, no extreme leg stretching, minimum 10 exercise-based mechanics, quick enough for a break.
-
-**Principles kept from the original accessibility research [S]:** calibrated range (≤ 85 % of reach), one-hand mode, no lower-body requirement, stop at any time, no unintended locomotion, not a medical device.
+- **Core vibe [D]:** **Zen Mastery Arcade** — tranquil Japanese dojo visual framing (tatami, shoji, wood pillars acting as a static anti-cybersickness reference) paired with fast, rhythmic, combo-driven `30 s` arcade rounds, **Dojo Mastery Ranks (`C / B / A / S / Zen Master`)**, and **Personal Best** tracking.
+- **10 Core Mechanics for Week 14 [D]:** All 10 existing mechanics (`M01`–`M10`) are reskinned to the Zen Dojo theme and upgraded with strict anti-cheat/anti-raycast checks so both **Hand Tracking** and **Handheld Controllers** require real upper-body exercise. *(New mechanics like `M11 Dojo Gate Opener / Cactus Arms`, `M12 Rei Breath`, `M13 Ink Spiral` are deferred to Post-Week 14 stretch scope to protect the 2-week deadline.)*
+- **3 Routines [D]:** *Full Upper-Body Reset*, *Arms & Shoulders*, and *Back & Posture* (`3 min` Quick default; `6 min` / `10 min` Extended with mid-session Passthrough breather).
+- **Accessibility principles retained [S]:** 100% seated upper-body only, calibrated comfortable reach (`<= 85%`), one-hand mode, No-Trunk mode, stop at any time, zero unintended locomotion, **not a medical device**.
 
 ---
 
-## 3. Decision log
+## 3. Locked Decision Log (v0.4)
 
 | ID | Decision | Status |
 |---|---|---|
-| D-01 | Primary engine: **Unity 6 (6000.x)**, C# | Locked |
-| D-02 | XR API: **OpenXR** + XR Interaction Toolkit 3.x (Unity). No Oculus XR Plugin. | Locked **[S]** |
-| D-03 | Input: **controllers only**. Hand tracking deferred (2 of 5 visible survey rows asked for it). | Locked |
-| D-04 | Platform: **Meta Quest 2, 3, 3S only**. | Locked |
-| D-05 | Tracking origin: **Device (seated)**; gameplay positions are relative to a calibrated BodyFrame. | Locked **[S]** |
-| D-06 | Passthrough only via `IPlatformServices`, with a fallback pause scene. | Locked |
-| D-07 | Local JSON persistence only. No network permission. | Locked **[S]** |
-| D-08 | No headset yet: simulators + unit tests. **Real-device validation is mandatory before any demo or user test.** | Locked (until a device is available) |
-| D-09 | Performance baseline: **Quest 2**. | Locked |
-| D-10 | **Audience: desk-working gamers and students** (survey audience). | Locked (your decision) |
-| D-11 | **Scope: the 10 draft mechanics replace the 5 PDF movements.** | Locked (your decision) |
-| D-12 | **Second build in Godot** for testing, in addition to Unity (parallel, not a migration). Only the **P0 slice** is guaranteed. | Locked (your decision) |
-| D-13 | Safety levels: **A** (arms only) and **B** (trunk/neck). Level B has its own calibration, limits, and a **No-trunk mode**. | Locked |
-| D-14 | Reminders when the app is closed are **out of scope** (needs a phone/desktop companion). | Locked |
-| D-15 | First Quest model to test on | **Open** |
+| D-01 | Single engine: **Godot 4.7+ (`GDScript`, `gl_compatibility`)** in `godot/`. Unity build deleted (`1dbc35c`). | Locked **[D]** |
+| D-02 | XR API: **OpenXR** (`Reference Space = Local / Seated`) + Godot OpenXR Vendors plugin. No vendor SDK calls outside `autoload/platform.gd`. | Locked **[D]** |
+| D-03 | Input: **Hybrid OpenXR Hand Tracking (primary) + Handheld Controller (fallback)**. **Zero raycasting during `ROUND_PLAY`** (`GP-ANTI-CHEAT-01`). | Locked **[D]** |
+| D-04 | Target platforms: **PICO 4 Ultra** & **Meta Quest 2 / 3 / 3S** (+ Linux Desktop Simulator). Render budget targets 72–90 FPS across all three. | Locked **[D]** |
+| D-05 | Tracking origin: **Local (seated)**; gameplay positions computed strictly in chest-anchored `BodyFrame` (`SpecSpace` -> Godot via `core/spec_space.gd`). | Locked **[S][D]** |
+| D-06 | Passthrough via `Platform.set_passthrough()` (alpha blend) with calm Zen Dojo fallback scene if unsupported. | Locked **[D]** |
+| D-07 | Local JSON persistence only (`user://`). No network permission, no cloud leaderboards, no analytics. | Locked **[S][D]** |
+| D-08 | Real-device validation on PICO 4 Ultra and Meta Quest 3 is mandatory for Week 12 profiling and Week 14 user evaluation. | Locked **[D]** |
+| D-09 | Theme & Mascot: **Zen Dojo** (Japanese tranquil dojo) + **Zeno** (`Floating Mascots.glb`). All 10 mechanics reskinned to Dojo names. | Locked **[D]** |
+| D-10 | Primary audience: **desk-working students, gamers, and developers ("lazy couch geeks")**; lower-body mobility accessibility kept via *curb-cut effect*. | Locked **[D]** |
+| D-11 | Week 14 scope: **10 existing mechanics (`M01`–`M10`) fully fixed & reskinned** (no extra mechanics before Week 14 playtest). | Locked **[D]** |
+| D-12 | Gameplay style: **Arcade Score Attack** (`30 s` rounds, combo `1.0x–2.0x`, **Dojo Mastery Rank `C/B/A/S/Zen Master` + Personal Best**). **No belt progression.** | Locked **[D]** |
+| D-13 | Safety levels: **A** (arms only, speed bonus allowed) and **B** (trunk/neck, **smoothness/precision bonus ONLY**, stable-chair gate + No-Trunk mode). | Locked **[D]** |
+| D-14 | Routine Picker: **3 Upper-Body Routines** (*Full Upper-Body Reset*, *Arms & Shoulders*, *Back & Posture*) + `3 min` (default) / `6 min` / `10 min` durations + optional `15–20 s` Warm-Up (Xu et al. 2020). | Locked **[D]** |
+| D-15 | Main Menu buttons: **`Play`, `Settings`, `Credits`, `Quit`** (`get_tree().quit()`). | Locked **[D]** |
+| D-16 | Feedback without haptics: Spatial **Dojo Audio SFX** (with combo pitch escalation) + lightweight **3D particle burst & floating score text** mandatory for Hand Tracking mode. | Locked **[D]** |
+| D-17 | Render budget: Total <= 200k–350k tris, <= 120 draw calls, max 1 `DirectionalLight3D` (no real-time room shadows), textures <= 2048/1024, `ETC2/ASTC`. | Locked **[D]** |
+| D-18 | Non-medical wording: Never use clinical terms like *"Sores"* or claim eye/pain treatment. | Locked **[S][D]** |
+| D-19 | Off-headset break reminders, foot trackers, eye tracking, HR sensors, and cloud profiles remain **out of scope**. | Locked **[D]** |
 
 ---
 
-## 4. Risks you should know about now
+## 4. Rules for AI coding assistants (read before editing `godot/`)
 
-1. **Scope vs. time vs. hardware.** 10 mechanics + two engines in 8 weeks, with no headset, is tight. Mitigation: shared framework, **P0 → P1 → P2** order (`gameplay/00` §11), and a Godot build limited to the P0 slice if time runs short. Cut Godot before cutting mechanics (course constraint: ≥ 10).
-2. **Existing Unity build vs. new spec.** ZenoFit was built before this spec. Run **Task A (audit)** in `04-workspace-and-antigravity.md` before assuming anything exists.
-3. **Survey is thin.** 8 responses (5 visible), mostly peers. Use it as direction, not proof. See `research/01-survey-analysis.md`.
-4. **Trunk/neck mechanics add risk.** Level B mechanics rely on proxies (controllers cannot measure torso rotation directly) and need a stable chair. Keep them P2 and behind No-trunk mode.
-5. **Gaze tracking does not exist on Quest 2/3/3S** **[V]**. Recon Scanner uses head pointing.
-6. **No headset = unverified feel.** Get hardware access **by the end of week 2**, or weeks 7–8 (A/B tests) will slip.
-7. **Safety claims.** Reach and angle limits are sensible defaults, not clinical guidance. No health claims in the UI. **[S]**
-
----
-
-## 5. Rules for AI coding assistants (read before generating code)
-
-1. Read `00` → `research/01` → `gameplay/00` → the specific files for the task, before writing code.
-2. **Do not add packages, SDKs, or plugins** that are not listed in `01-techstack.md` (Unity) or `03-godot-build.md` (Godot) without asking.
-3. **Quest-specific code lives only in the platform layer** (`Scripts/Platform/Quest/` in Unity, `platform.gd` in Godot). Gameplay code calls the platform interface.
-4. **No hand tracking, no cloud, no networking, no analytics.**
-5. **No locomotion.** Never move, rotate, or scale the XR origin during gameplay. Never roll the world.
-6. **Never place a target outside the calibrated range** (`gameplay/01` §4.3, §4.7) **or inside an obstacle exclusion zone** (§4.5).
-7. **Scoring depends only on arm accuracy, rhythm, and smoothness.** Never on posture or the lower body.
-8. Every number tagged **[P]** must be a tweakable field (ScriptableObject / Resource), not a magic number.
-9. Pure maths in plain classes with unit tests that use the **same numbers** as `gameplay/16-acceptance-tests.md`.
-10. If a requirement is ambiguous or marked **[V]**, **ask or flag it**. Do not guess silently.
-11. Keep each mechanic independent: a new mechanic = one class + one config + one `gameplay/` file.
-12. **No health claims** in UI text or docs ("not a medical device").
-13. Godot only: convert coordinates and yaw through `core/spec_space.gd` (`03-godot-build.md` §3.1).
+1. Read `../AGENTS.md`, `00-README.md`, `00-gameplay-overview.md`, `03-godot-build.md`, and the target mechanic/subsystem file before modifying code.
+2. **Never break existing acceptance tests (`AT-01`–`AT-28`)** when adding v0.4 fixes (`AT-29`–`AT-35`). Run the headless test suite after every slice.
+3. **Platform calls live ONLY in `godot/autoload/platform.gd`.** Keep OpenXR standard so both PICO 4 Ultra and Meta Quest 3 work from one codebase.
+4. **No raycasting during `ROUND_PLAY`.** Enforce all anti-cheat checks in `core/mechanics_math.gd` + `mechanics/mXX/*.gd`.
+5. **No locomotion.** Never move, rotate, or scale `XROrigin3D` during gameplay. Never roll the world camera.
+6. **Never place a target outside `k <= 0.85` calibrated reach or inside obstacle exclusion zones.** Use the **scapular plane ($15^\circ\text{–}30^\circ$ forward)** for wide-arm mechanics (`M03`) so optical hand tracking stays inside camera FoV.
+7. **Pure maths in `godot/core/`**; convert coordinates and yaw ONLY through `godot/core/spec_space.gd`.
+8. **Respect the mobile VR render budget (D-17)**—never enable SSAO, SSR, volumetric fog, or real-time room shadows.
+9. **No health/medical claims** in UI text, code, or docs (*"Not a medical device"*).
+10. Work in small, verifiable slices (see `04-workspace-and-antigravity.md` §4).
 
 ---
 
-## 6. Glossary
-
-| Term | Meaning |
-|---|---|
-| **OpenXR** | Open cross-vendor standard for XR devices. |
-| **XRI** | Unity's XR Interaction Toolkit. |
-| **Interaction profile** | OpenXR description of a controller type. Enable the profiles of your target devices or controllers won't track. |
-| **Tracking origin** | Reference point for tracked positions. *Device* = headset at start (seated). *Floor* = floor height. |
-| **BodyFrame** | Calibrated coordinate system: origin at the chest, +Z forward, +Y up, +X right (spec space). |
-| **Score Attack** | The 3-minute session: 5 rounds × 30 s, each a different mechanic, with a combo multiplier. |
-| **Safety level A / B** | A = arms only. B = trunk or neck movement (extra safety rules). |
-| **No-trunk mode** | Setting that removes all Level B mechanics. |
-| **P0 / P1 / P2** | Build priority. P0 = vertical slice (and the Godot parity slice). |
-| **Passthrough** | Showing the real world through the headset cameras. |
-| **SSQ** | Simulator Sickness Questionnaire (cybersickness measure). **[S]** |
-| **Parity build** | The Godot build that must pass the same acceptance tests as Unity. |
-
----
-
-## 7. Assumptions and clarifications
-
-| # | Observation | Decision in this spec |
-|---|---|---|
-| A1 | Original PDF: side raise cap 60°–70° (wheelchair users). | Desk audience: presets 60° / 75° / 90° (§6.3). |
-| A2 | PDF heart-rate formula is garbled (reads like `220 − age − 20`). | HR is out of scope; formula kept only as a reference (§8.7). |
-| A3 | Draft: "headset gaze-tracking" for Recon Scanner. | Not on Quest 2/3/3S **[V]**. Head-pointing reticle. |
-| A4 | Draft: Potion Brewer "tossing" ingredients. | Replaced by **wrist pour** (safer, measurable, covers the survey's wrist/RSI need). Toss may return as advanced mode. |
-| A5 | Draft: Glider Pilot "tilting to steer". | Steering uses **arm height difference**, not body lean. World never rolls (comfort). |
-| A6 | Draft: Turret Gunner needs torso rotation. | Controllers cannot measure the torso; proxy = hands near chest + hand-midpoint yaw. Limitation documented **[V]**. |
-| A7 | Draft: Recon Scanner "far focus" for eye strain. | VR has a fixed focal distance **[V]**, so no eye-relief claim; far-look break uses passthrough + the real room. |
-| A8 | Draft add-on 1: Passthrough Desk Mode. | Optional P2, behind the platform interface. |
-| A9 | Draft add-on 2: posture-based multipliers. | **Deferred** (high cost, risk of frustration). |
-| A10 | Survey: reminder timer is a top feature. | A headset app cannot remind a non-wearing user. Out of scope; companion needed (D-14). |
-| A11 | Survey: hand tracking requested. | Deferred; controllers first (D-03). |
-| A12 | Wheelchair-specific content in the PDF. | Principles kept (calibrated range, one-hand mode, stop anytime); wheelchair-specific guidance is no longer the primary audience (D-10). |
-
----
-
-## 8. Open questions
-
-1. Which Quest model will you get hands on first, and when? (D-15)
-2. Does the course require **all 10 mechanics implemented** by the deadline, or 10 *designed*? (This decides whether P2 can slip.)
-3. What is the concept text shown to survey respondents? (Needed to interpret the interest ratings.)
-4. Who can review safety defaults (a physiotherapist or similar) before user tests?
-5. Do you need a Meta Store release, or is sideloading enough for the demo?
-
----
-
-## 9. Changelog
+## 5. Changelog
 
 | Date | Change |
 |---|---|
 | 2026-11-11 | v0.1 initial draft (Quest + PICO, single gameplay file). |
-| 2026-11-12 | v0.2: Meta Quest only; gameplay split into files with Tunables + Open questions. |
-| 2026-11-15 | v0.3: desk-gamer audience; the 10 mechanics replace the 5 (one file each); Score Attack loop; safety levels A/B; survey analysis added; Godot parallel build and Antigravity workspace guide added. |
+| 2026-11-12 | v0.2 Meta Quest only; gameplay split into files with Tunables + Open questions. |
+| 2026-11-15 | v0.3 desk-gamer audience; 10 mechanics; Score Attack; safety levels A/B; Godot parallel build added. |
+| 2026-11-22 | **v0.4 Zen Dojo Arcade Revision:** Godot 4.7-only (Unity deleted); repo reorganized (`berkas/`, `godot/`, `asset/`); PICO 4 Ultra + Meta Quest 3 multi-platform + render budget; Hybrid Hand Tracking + Controller fallback; strict Anti-Raycast & Anti-Cheat rules (`AT-29`–`AT-35`); 3 Routines + `3/6/10 min` + Main Menu (`Play/Settings/Credits/Quit`); Dojo Mastery Rank + Personal Best (no belt progression); Dojo Audio/Visual Juice for controller-free play; 2-week Week 14 sprint scope locked to 10 existing mechanics. |

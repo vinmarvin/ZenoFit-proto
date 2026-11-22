@@ -1,5 +1,8 @@
 # Research 01 — ZenoFit Survey Analysis
 
+> [!NOTE]
+> **v0.4 Update (2026-11-22):** All 8 survey rows have now been anonymized (`R1`–`R8`, Nama & NRP stripped) and stored safely at `berkas/Ideation/Jaras Pengguna.csv`. See `berkas/Ideation/Zenofit Analysis.md` for the unified user analysis.
+
 > Source: "ZenoFit - Form Responses" (Google Form export, 10–11 Nov 2026) as pasted into the chat (pandas `describe()` output + first 5 rows).
 > Legend: **[F]** fact computed from the data · **[I]** inference (derived, explained) · **[P]** proposal · **[V]** verify.
 
@@ -83,8 +86,8 @@ Interval ≈ **41 % to 93 %**. The true share of the wider audience who rate it 
 | F2 Setup friction | Session is 3 minutes; returning users skip calibration (≤ 15 s check); the first target appears within ≤ 30 s. | `gameplay/00` §1 (G7, G8); `gameplay/01` `GP-CAL-11` |
 | F3 Preventive | No pain-relief or health claims. Results screen shows body areas "covered", not "treated". | `gameplay/13` `GP-SCORE-06`; `gameplay/14` §8.8 |
 | F4 Neck and shoulder | Four of ten mechanics target neck and shoulders, and the balanced draw guarantees one per session. | `gameplay/00` §5.2 |
-| F4 Wrist (RSI) | None of the 10 original mechanics trains the wrist. Added a **wrist pour** to Potion Brewer. Consider a dedicated wrist mechanic if one of the 10 is dropped. | `gameplay/11` §6.9 |
-| F4 Eyes | Recon Scanner uses a **real-room far-look break** (passthrough). VR optics use a fixed focal distance, so do not claim eye relief inside VR **[V]**. | `gameplay/10` §6.8 |
+| F4 Wrist (RSI) | None of the 10 original mechanics trains the wrist. Added a **wrist pour** to Tea Ceremony Pour. Consider a dedicated wrist mechanic if one of the 10 is dropped. | `gameplay/11` §6.9 |
+| F4 Eyes | Zen Horizon Watch uses a **real-room far-look break** (passthrough). VR optics use a fixed focal distance, so do not claim eye relief inside VR **[V]**. | `gameplay/10` §6.8 |
 | F5 Scoring | Score Attack with combo multiplier. | `gameplay/13` §7.5 |
 | F5 Hand tracking | Deferred. Controllers are more reliable for rhythm and hold mechanics. Revisit after the core loop works. | `gameplay/00` §12 |
 | F5 Passthrough | Optional P2 "Desk Mode" behind `IPlatformServices`. Also used for auto-pause. | `02-quest-config.md` S-4 |
@@ -100,7 +103,7 @@ Interval ≈ **41 % to 93 %**. The true share of the wider audience who rate it 
 | Movements | 5 arm exercises | 10 mechanics, including trunk twist, side bend, neck | 10 mechanics; trunk/neck ones are **Level B** with extra safety and a No-trunk mode. |
 | Side raise limit | 60°–70° | Shoulder height (≈ 90°) | Preset 60° / 75° / 90°. |
 | Hand tracking | Out of scope | Requested by 2 of 5 visible rows | Still out of scope. |
-| Gaze tracking | — | Recon Scanner needs it | Not available on Quest 2/3/3S **[V]**; head pointing used. |
+| Gaze tracking | — | Zen Horizon Watch needs it | Not available on Quest 2/3/3S **[V]**; head pointing used. |
 
 ---
 

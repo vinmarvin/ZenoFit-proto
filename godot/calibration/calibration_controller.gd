@@ -1,8 +1,8 @@
 class_name CalibrationController
 extends RefCounted
 
-## Implements 7-step seated calibration (01-body-frame-and-calibration.md §4.2),
-## returning-user quick seat check (GP-CAL-11, <= 15s),
+## Implements 8-step seated calibration (01-body-frame-and-calibration.md §4.2 + CHAIR_CHECK),
+## returning-user quick seat check (GP-CAL-11, <= 10s),
 ## and on-demand Level B module calibrations (Twist, Neck, Lean, §4.7).
 
 var working_profile: ComfortProfile
@@ -10,6 +10,7 @@ var current_body_frame: BodyFrame
 var seat_anchor_local_spec: Vector3 = Vector3(0.0, 0.25, -0.08)
 var current_step: int = ZenoEnums.CalibrationStep.SEAT_ANCHOR
 var is_quick_check_only: bool = false
+var is_swivel_chair: bool = false
 var _left_shoulder_captured: bool = false
 var _module_left_captured: bool = false
 
@@ -24,9 +25,15 @@ func start_full_calibration() -> void:
 	_module_left_captured = false
 
 func start_returning_user_quick_check() -> void:
-	# GP-CAL-11: Returning user only confirms seated pose (steps 1-2) in <= 15s
+	# GP-CAL-11: Returning user only confirms seated pose (steps 1-2) in <= 10s
 	is_quick_check_only = true
 	current_step = ZenoEnums.CalibrationStep.SEAT_ANCHOR
+
+func confirm_chair_type(swivel_chair: bool) -> bool:
+	is_swivel_chair = swivel_chair
+	if current_step == ZenoEnums.CalibrationStep.CHAIR_CHECK:
+		current_step = ZenoEnums.CalibrationStep.CHEST_POINT
+	return false
 
 func start_module_calibration(module_step: int) -> void:
 	is_quick_check_only = false
@@ -36,19 +43,23 @@ func start_module_calibration(module_step: int) -> void:
 func get_step_instruction() -> String:
 	match current_step:
 		ZenoEnums.CalibrationStep.SEAT_ANCHOR:
-			return "Step 1/7: Sit comfortably and look straight forward. Press Trigger / Space to confirm."
+			if is_quick_check_only:
+				return "Quick Seat Check (<= 10 s): Sit comfortably looking straight ahead and confirm."
+			return "Step 1/8: Sit comfortably and look straight forward. Press Pinch / Trigger / Space to confirm."
+		ZenoEnums.CalibrationStep.CHAIR_CHECK:
+			return "Step 2/8: Chair Safety Check — Is this a STABLE non-rolling chair? Confirm Stable, or press Skip if Swivel/Rolling (locks Level B safely)."
 		ZenoEnums.CalibrationStep.CHEST_POINT:
-			return "Step 2/7: Touch your chest (sternum) with a controller and confirm (or Skip for default)."
+			return "Step 3/8: Touch your chest (sternum) with a hand and confirm (or Skip for default)."
 		ZenoEnums.CalibrationStep.SHOULDERS:
-			return "Step 3/7: Touch your LEFT shoulder and confirm, then RIGHT shoulder (or Skip for 0.40 m)."
+			return "Step 4/8: Touch your LEFT shoulder and confirm, then RIGHT shoulder (or Skip for 0.40 m)."
 		ZenoEnums.CalibrationStep.LEFT_REACH:
-			return "Step 4/7: Reach forward with your LEFT hand as far as comfortable (no pain) and confirm (Skip disables Left hand)."
+			return "Step 5/8: Reach forward with your LEFT hand as far as comfortable (no pain) and confirm (Skip disables Left hand)."
 		ZenoEnums.CalibrationStep.RIGHT_REACH:
-			return "Step 5/7: Reach forward with your RIGHT hand as far as comfortable (no pain) and confirm (Skip disables Right hand)."
+			return "Step 6/8: Reach forward with your RIGHT hand as far as comfortable (no pain) and confirm (Skip disables Right hand)."
 		ZenoEnums.CalibrationStep.LAP_POINT:
-			return "Step 6/7: Rest both hands in your lap and confirm (used for 2 s safety Auto-Pause)."
+			return "Step 7/8: Rest both hands in your lap and confirm (used for 2 s safety Auto-Pause)."
 		ZenoEnums.CalibrationStep.OBSTACLES:
-			return "Step 7/7: Touch desk edge / keyboard / armrests to mark obstacles, or click Finish Calibration."
+			return "Step 8/8: Touch desk edge / keyboard / armrests to mark obstacles, or click Finish Calibration."
 		ZenoEnums.CalibrationStep.MODULE_TWIST:
 			if not _module_left_captured:
 				return "Twist Module (1/2): Hold controllers near chest, turn torso LEFT comfortably, and confirm."
@@ -84,6 +95,11 @@ func confirm_current_step(
 			if is_quick_check_only:
 				current_step = ZenoEnums.CalibrationStep.COMPLETE
 				return true
+			current_step = ZenoEnums.CalibrationStep.CHAIR_CHECK
+			return false
+
+		ZenoEnums.CalibrationStep.CHAIR_CHECK:
+			is_swivel_chair = false
 			current_step = ZenoEnums.CalibrationStep.CHEST_POINT
 			return false
 
@@ -201,6 +217,10 @@ func mark_obstacle_point(hand_world_spec: Vector3) -> void:
 
 func skip_current_step() -> bool:
 	match current_step:
+		ZenoEnums.CalibrationStep.CHAIR_CHECK:
+			is_swivel_chair = true
+			current_step = ZenoEnums.CalibrationStep.CHEST_POINT
+			return false
 		ZenoEnums.CalibrationStep.CHEST_POINT:
 			working_profile.chest_offset_from_head_m = Vector3(0.0, -ComfortProfile.DEFAULT_CHEST_OFFSET_BELOW_HEAD_M, 0.08)
 			current_step = ZenoEnums.CalibrationStep.SHOULDERS

@@ -97,3 +97,15 @@ class RoundScoreTracker extends RefCounted:
 		if total <= 0:
 			return 0.0
 		return 100.0 * float(hits) / float(total)
+
+## Computes Dojo Mastery Rank from session accuracy percentage (no belt system).
+static func compute_dojo_rank(accuracy_percent: float) -> String:
+	if accuracy_percent >= 90.0:
+		return "Zen Master"
+	elif accuracy_percent >= 75.0:
+		return "S"
+	elif accuracy_percent >= 55.0:
+		return "A"
+	elif accuracy_percent >= 35.0:
+		return "B"
+	return "C"

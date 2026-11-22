@@ -12,17 +12,102 @@ extends RefCounted
 
 static func get_all_mechanics() -> Array[int]:
 	return [
-		ZenoEnums.MechanicId.M01_ASTEROID_BRAWLER,
-		ZenoEnums.MechanicId.M02_FRUIT_HARVESTER,
-		ZenoEnums.MechanicId.M03_GLIDER_PILOT,
-		ZenoEnums.MechanicId.M04_TURRET_GUNNER,
-		ZenoEnums.MechanicId.M05_COSMIC_TUG_OF_WAR,
-		ZenoEnums.MechanicId.M06_FORCE_BLAST,
-		ZenoEnums.MechanicId.M07_SHIELD_CRANK,
-		ZenoEnums.MechanicId.M08_RECON_SCANNER,
-		ZenoEnums.MechanicId.M09_POTION_BREWER,
-		ZenoEnums.MechanicId.M10_LASER_EVADER
+		ZenoEnums.MechanicId.M01_MAKIWARA_STRIKES,
+		ZenoEnums.MechanicId.M02_SAKURA_CATCH,
+		ZenoEnums.MechanicId.M03_CRANE_WINGS,
+		ZenoEnums.MechanicId.M04_BOKKEN_GUARD,
+		ZenoEnums.MechanicId.M05_TEMPLE_BELL_PULL,
+		ZenoEnums.MechanicId.M06_KI_PALM_PUSH,
+		ZenoEnums.MechanicId.M07_ZEN_WATER_WHEEL,
+		ZenoEnums.MechanicId.M08_ZEN_HORIZON_WATCH,
+		ZenoEnums.MechanicId.M09_TEA_CEREMONY_POUR,
+		ZenoEnums.MechanicId.M10_BAMBOO_SWAY
 	]
+
+## Draws upper-body routines aligned to v0.4 Routine Picker options while obeying
+## no_trunk_mode and non-consecutive Level B constraints.
+static func draw_for_routine(
+	routine_id: int,
+	no_trunk_mode: bool = false,
+	previous_session_mechanics: Array[int] = [],
+	rng: RandomNumberGenerator = null,
+	round_count: int = -1
+) -> Array[int]:
+	if rng == null:
+		rng = RandomNumberGenerator.new()
+		rng.randomize()
+
+	if routine_id == ZenoEnums.RoutineId.FULL_UPPER_DOJO:
+		var base := draw_five_mechanics(no_trunk_mode, previous_session_mechanics, rng)
+		var target_n := round_count if round_count > 0 else 5
+		if target_n <= 5:
+			return base.slice(0, target_n)
+		# Extend deterministically without consecutive Level B for 10-min extended sessions
+		var extra_pool: Array[int] = []
+		for m in get_all_mechanics():
+			if no_trunk_mode and ZenoEnums.get_mechanic_safety_level(m) == ZenoEnums.SafetyLevel.LEVEL_B:
+				continue
+			if not base.has(m):
+				extra_pool.append(m)
+		_shuffle_array(extra_pool, rng)
+		for m in extra_pool:
+			if base.size() >= target_n:
+				break
+			var prev_b := ZenoEnums.get_mechanic_safety_level(base[base.size() - 1]) == ZenoEnums.SafetyLevel.LEVEL_B
+			if prev_b and ZenoEnums.get_mechanic_safety_level(m) == ZenoEnums.SafetyLevel.LEVEL_B:
+				continue
+			base.append(m)
+		while base.size() < target_n:
+			base.append(base[base.size() % 5] if ZenoEnums.get_mechanic_safety_level(base[base.size() % 5]) == ZenoEnums.SafetyLevel.LEVEL_A else ZenoEnums.MechanicId.M01_MAKIWARA_STRIKES)
+		return base
+
+	var preferred: Array[int] = []
+	var default_rounds := 3
+	if routine_id == ZenoEnums.RoutineId.SHOULDER_NECK_REFRESH:
+		preferred = [
+			ZenoEnums.MechanicId.M02_SAKURA_CATCH,
+			ZenoEnums.MechanicId.M03_CRANE_WINGS,
+			ZenoEnums.MechanicId.M07_ZEN_WATER_WHEEL,
+			ZenoEnums.MechanicId.M08_ZEN_HORIZON_WATCH
+		]
+		default_rounds = 3
+	else:
+		# POSTURE_MOBILITY_FLOW
+		preferred = [
+			ZenoEnums.MechanicId.M05_TEMPLE_BELL_PULL,
+			ZenoEnums.MechanicId.M06_KI_PALM_PUSH,
+			ZenoEnums.MechanicId.M04_BOKKEN_GUARD,
+			ZenoEnums.MechanicId.M10_BAMBOO_SWAY,
+			ZenoEnums.MechanicId.M01_MAKIWARA_STRIKES
+		]
+		default_rounds = 4
+
+	var filtered: Array[int] = []
+	for m in preferred:
+		if no_trunk_mode and ZenoEnums.get_mechanic_safety_level(m) == ZenoEnums.SafetyLevel.LEVEL_B:
+			continue
+		filtered.append(m)
+
+	var fallback_order := [
+		ZenoEnums.MechanicId.M01_MAKIWARA_STRIKES,
+		ZenoEnums.MechanicId.M02_SAKURA_CATCH,
+		ZenoEnums.MechanicId.M03_CRANE_WINGS,
+		ZenoEnums.MechanicId.M05_TEMPLE_BELL_PULL,
+		ZenoEnums.MechanicId.M06_KI_PALM_PUSH,
+		ZenoEnums.MechanicId.M07_ZEN_WATER_WHEEL,
+		ZenoEnums.MechanicId.M09_TEA_CEREMONY_POUR
+	]
+	var target_rounds := round_count if round_count > 0 else default_rounds
+	for m in fallback_order:
+		if filtered.size() >= target_rounds:
+			break
+		if not filtered.has(m):
+			filtered.append(m)
+
+	var chosen := filtered.slice(0, min(target_rounds, filtered.size()))
+	while chosen.size() < target_rounds:
+		chosen.append(fallback_order[chosen.size() % fallback_order.size()])
+	return _arrange_without_consecutive_level_b(chosen, rng)
 
 static func draw_five_mechanics(
 	no_trunk_mode: bool = false,
@@ -82,7 +167,7 @@ static func draw_five_mechanics(
 static func substitute_level_a_mechanic(current_lineup: Array[int], replace_index: int) -> int:
 	var all_mechs := get_all_mechanics()
 	# Prefer a Level A mechanic in the same body-area group first
-	var old_mech := current_lineup[replace_index] if replace_index >= 0 and replace_index < current_lineup.size() else ZenoEnums.MechanicId.M04_TURRET_GUNNER
+	var old_mech := current_lineup[replace_index] if replace_index >= 0 and replace_index < current_lineup.size() else ZenoEnums.MechanicId.M04_BOKKEN_GUARD
 	var target_group := ZenoEnums.get_mechanic_group(old_mech)
 
 	for m in all_mechs:
@@ -99,7 +184,7 @@ static func substitute_level_a_mechanic(current_lineup: Array[int], replace_inde
 				current_lineup[replace_index] = m
 			return m
 
-	return ZenoEnums.MechanicId.M05_COSMIC_TUG_OF_WAR
+	return ZenoEnums.MechanicId.M05_TEMPLE_BELL_PULL
 
 static func _weighted_pick(pool: Array[int], prev_seen: Array[int], rng: RandomNumberGenerator) -> int:
 	var weights: Array[float] = []

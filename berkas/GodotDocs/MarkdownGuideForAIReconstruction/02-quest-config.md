@@ -1,3 +1,6 @@
+> [!WARNING]
+> **DEPRECATED (Unity Build Removed in Commit `1dbc35c`):** ZenoFit is now **Godot 4.7 Only** (`godot/`), targeting **PICO 4 Ultra** and **Meta Quest 2/3/3S**. Read **`03-godot-build.md`** and **`../AGENTS.md`** instead.
+
 # 02 — Meta Quest Configuration (Quest 2 / 3 / 3S)
 
 > Legend: **[S]** from source PDF · **[P]** proposal · **[V]** verify against current Unity/Meta docs (menu names and versions change).

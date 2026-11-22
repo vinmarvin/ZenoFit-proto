@@ -1,209 +1,114 @@
-# 03 — Godot Build (second version for testing)
+# 03 — Godot 4.7 Multi-Platform Build Guide (PICO 4 Ultra & Meta Quest 3)
 
-> Legend: **[S]** source/research · **[P]** proposal · **[V]** verify against current Godot / Meta docs.
-> **Purpose (your decision):** keep the Unity build **and** add a Godot build, so both can be tested on a Quest and compared. This is a **parallel build**, not a migration.
+> **Version:** 0.4 (Godot is now the **sole active engine**; Unity was deleted in commit `1dbc35c`.)
+> Legend: **[S]** source/research · **[D]** locked decision · **[P]** tunable default · **[V]** verify on hardware.
 
-## 1. Reality check (read this first)
+---
 
-| Fact | Consequence |
-|---|---|
-| There is **no converter** from Unity to Godot. Scenes, prefabs, C# scripts, and XR packages do not transfer. | It is a **rewrite guided by the spec**, using the Unity code only as a reference for logic. |
-| The spec pack is engine-agnostic: formulas, numbers, and acceptance tests (`gameplay/16`) do not depend on the engine. | This is why the same tests can be run against both builds. |
-| 10 mechanics + two engines in 8 weeks, with no headset yet. | **Port only the P0 slice first** (calibration + Score Attack loop + M01, M06, M07). Expand only if time allows. |
-| A/B testing needs a real Quest. | Simulator results do not count for the comparison. |
-
-**Honest recommendation:** finish a Unity vertical slice first, freeze the numbers in the tests, then port the same slice to Godot. Starting both at once doubles the number of unknowns.
-
-## 2. Decisions for the Godot build
+## 1. Engine & Platform Decisions
 
 | ID | Decision | Notes |
 |---|---|---|
-| G-01 | Godot **4.6 or newer** (check current stable) **[V]** | From 4.6 the OpenXR Vendors plugin is optional but recommended; Godot can export to most Android XR devices directly. The plugin unlocks vendor features and may be needed for store releases. |
-| G-02 | Language: **GDScript** | Best-supported path. C# on Android export has been experimental in Godot 4.x **[V]**, so avoid it even though you know C#. |
-| G-03 | Renderer: **Compatibility (OpenGL)** | Godot's docs advise it for Android XR for now; the Mobile Vulkan renderer is still being polished **[V]**. |
-| G-04 | XR API: **OpenXR**, with the **Godot OpenXR Vendors plugin** installed (Meta features, passthrough). | Passthrough on Quest needs the vendors plugin v3.0.0 or later **[V]**. |
-| G-05 | Same package concept, **different Android package name** from the Unity build. | Lets both builds be installed side by side on one Quest. |
-| G-06 | Tests: **GUT** (or gdUnit4) for the pure-maths tests **[V]**. | Same numbers as `gameplay/16`. |
+| G-01 | **Godot 4.7+ (`4.7.2.stable`)** | Active project lives at `godot/project.godot`. |
+| G-02 | Language: **GDScript only** | Clean Android ARM64 export, zero C# export friction. |
+| G-03 | Renderer: **Compatibility (`gl_compatibility`)** + `ETC2/ASTC` VRAM compression + Dynamic Foveation Level 2 | Best stability & frame times on Android OpenXR headsets. |
+| G-04 | XR API: **OpenXR** (`Reference Space = Local / Seated`) + **Godot OpenXR Vendors plugin** (`godot/addons/godotopenxrvendors/`) | Single codebase exports to **PICO 4 Ultra** (`preset.0`) and **Meta Quest 2/3/3S** (`preset.1`). |
+| G-05 | Android package name: `com.zenofit.godot.mockup` | No internet permission (`permissions/internet=false`). |
+| G-06 | Automated tests: headless GDScript suite `godot/tests/run_acceptance_tests.gd` | Runs `AT-01`–`AT-35` without needing a headset. |
 
-## 3. Concept map: Unity → Godot
+---
 
-| Unity (this spec) | Godot |
-|---|---|
-| Scene / Prefab | Scene (`.tscn`), instanced as a node |
-| `MonoBehaviour` | `Node` with a GDScript attached |
-| `ScriptableObject` (`DifficultyPreset`, `ExerciseConfig`) | `Resource` (`.tres`) with `@export` fields |
-| XR Origin (Device tracking origin) | `XROrigin3D` + `XRCamera3D`; OpenXR **Reference Space = Local** (head-centred) **[V]** |
-| XR controllers (XRI) | `XRController3D` nodes (`left_hand`, `right_hand` trackers) |
-| Input System actions | OpenXR **Action Map** (`openxr_action_map.tres`) |
-| Controller haptics | `XRController3D.trigger_haptic_pulse(action, frequency, amplitude, duration, delay)` **[V]** |
-| Collider (trigger) / Layers | `Area3D` + `CollisionShape3D` / collision layers and masks |
-| Recenter event (`trackingOriginUpdated`) | `OpenXRInterface.pose_recentered` signal |
-| Passthrough (AR Foundation + Meta feature) | OpenXR **environment blend mode** (alpha blend) + vendors plugin |
-| Coroutines / C# events | `await` + signals |
-| `Application.persistentDataPath` JSON | `user://` + `FileAccess` + `JSON` |
-| Assembly definitions | Folders / autoloads (no equivalent) |
-| Build Profiles | **Export presets** (one per device) |
-| `IPlatformServices` | An autoload `platform.gd` with two implementations (Quest, DesktopSim) |
+## 2. Coordinate Space & Yaw Traps (`core/spec_space.gd`)
 
-### 3.1 Two traps that will silently break the numbers
+1. **Z-Axis Handedness:** Spec space uses **`+Z` forward** (left-handed). Godot uses **`-Z` forward** (right-handed).
+   - `SpecSpace.to_godot(p_spec) -> Vector3(p_spec.x, p_spec.y, -p_spec.z)`
+   - Example: `z = +0.51 m` in spec → `z = -0.51 m` in Godot.
+2. **Yaw Sign:** Spec positive yaw = turning **RIGHT** (clockwise from above). Godot positive `rotation.y` = turning **LEFT** (counter-clockwise).
+   - `SpecSpace.yaw_deg_to_godot_deg(psi) -> -psi`
+   - Example: `psi_max_R = +40°` in spec → `rotation.y = -40°` in Godot.
 
-**1. Coordinate handedness.** Unity is left-handed with **+Z forward**. Godot is right-handed with **−Z forward**. The spec uses `+Z forward` (BodyFrame). Keep spec math in *spec space* and convert only at the boundary:
+**Hard Rule:** Perform ALL gameplay math in `SpecSpace` / `BodyFrame`, and convert at the rendering/input boundary ONLY via `godot/core/spec_space.gd`.
 
-```gdscript
-# spec space (x right, y up, z forward) -> Godot space
-static func to_godot(p: Vector3) -> Vector3:
-    return Vector3(p.x, p.y, -p.z)
-```
-**Simple problem.** A target `0.51 m` in front of the chest is `z = +0.51` in the spec. In Godot it is `z = −0.51`. If you forget, AT-01 passes in the maths test but the target appears behind the user.
+---
 
-**2. Yaw sign.** In the spec, positive yaw means turning **right** (clockwise from above). In Godot, positive rotation about +Y is counter-clockwise from above, so turning right is **negative**.
-**Case study.** The Twist calibration records `ψ_max,R = 40°` (spec). In Godot, the right-hand target's `rotation.y` is `−40°`. If the sign is not converted, right targets appear on the left.
+## 3. Active Godot Project Layout (`godot/`)
 
-Put both conversions in one file (`core/spec_space.gd`) and write a test for each.
-
-## 4. Godot project layout **[P]**
-
-```
-godot/ZenoFit/
+```text
+godot/
 ├─ project.godot
-├─ openxr_action_map.tres
-├─ addons/            godotopenxrvendors/  gut/
-├─ autoload/          platform.gd  game_flow.gd  event_bus.gd  save_service.gd
-├─ core/              spec_space.gd  body_frame.gd  geometry.gd  scoring.gd  adaptive_tempo.gd
-├─ calibration/
-├─ mechanics/         m01_asteroid_brawler/ … m10_laser_evader/   (one folder per mechanic)
-├─ targets/
-├─ safety/
-├─ ui/
-├─ resources/         difficulty_presets/*.tres
-├─ scenes/            boot.tscn  main_menu.tscn  session.tscn  results.tscn
-└─ tests/
-```
-Same rule as Unity: **pure maths in `core/` with tests; scene glue stays thin.**
-
-## 5. Setup (Quest) — step by step
-
-Follow the current Godot "Deploying to Android" XR page for exact menu names. **[V]**
-
-1. Install Godot 4.6+ and the Android prerequisites: **OpenJDK 17**, **Android Studio / Android SDK**, and set the SDK path in Godot's editor settings.
-2. `Project > Install Android Build Template…` (creates the `android/` folder for Gradle builds).
-3. Install the **OpenXR Vendors** plugin from the Asset Library (search "OpenXR vendors") and enable it.
-4. `Project Settings > XR > OpenXR`: **Enabled**, Form Factor **Head Mounted**, Reference Space **Local** (seated, head-centred) **[V]**.
-5. `Project Settings > Rendering`: renderer **Compatibility**; enable the XR shaders option **[V]**.
-6. `Project > Export… > Add… > Android`. Name it **Meta Quest**. Enable **Use Gradle Build**, set **XR Mode = OpenXR**, and under *XR Features* select the **Meta** entry (or Khronos if no entry appears). Enable **Runnable** for one-click deploy.
-7. Set a **different package name** from the Unity build (G-05) and a different app label ("ZenoFit (Godot)").
-8. Enable developer mode on the Quest, connect via USB, and use **one-click deploy**. On Windows you may need Meta's ADB driver. **[V]**
-
-### 5.1 Minimal startup script
-
-```gdscript
-extends Node3D
-
-var xr_interface: XRInterface
-
-func _ready() -> void:
-    xr_interface = XRServer.find_interface("OpenXR")
-    if xr_interface and xr_interface.is_initialized():
-        DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
-        get_viewport().use_xr = true
-        xr_interface.pose_recentered.connect(_on_pose_recentered)
-    else:
-        push_warning("OpenXR not initialized: running desktop simulator")
-
-func _on_pose_recentered() -> void:
-    # same rule as Unity: pause and ask the user to re-confirm the seat (gameplay/01 §4.4)
-    pass
+├─ openxr_action_map.tres        # Includes pico4s_controller, oculus/touch_controller, & ext/hand_interaction_ext
+├─ export_presets.cfg            # preset.0 PICO 4 Ultra, preset.1 Meta Quest, preset.2 Linux Desktop
+├─ main.tscn / main.gd           # XROrigin3D coordinator, hybrid hand/controller tracking, desktop sim
+├─ addons/godotopenxrvendors/    # OpenXR vendor loaders (Meta & PICO)
+├─ assets/                       # In-engine 3D models, Zen Dojo scene, Dojo audio SFX/BGM
+├─ autoload/                     # event_bus.gd, platform.gd, save_service.gd, game_flow.gd
+├─ core/                         # Pure math: spec_space.gd, body_frame.gd, comfort_profile.gd,
+│                                # difficulty_preset.gd, geometry.gd, adaptive_tempo.gd, scoring.gd,
+│                                # session_draw.gd, mechanics_math.gd, enums.gd
+├─ calibration/                  # calibration_controller.gd
+├─ safety/                       # safety_monitors.gd
+├─ mascot/                       # floating_mascot_coach.gd (Zeno procedural coach)
+├─ mechanics/                    # mechanic_base.gd + m01..m10 folders
+├─ resources/difficulty_presets/ # gentle.tres, standard.tres, active.tres
+├─ ui/                           # world_ui.gd (3D HUD + Main Menu + Routine Picker + Desktop overlay)
+├─ scripts/cast_vr_screen.sh     # Live 60 FPS ADB USB screencast & MP4 recorder
+└─ tests/                        # run_acceptance_tests.gd, test_acceptance_suite.gd
 ```
 
-### 5.2 Scene tree for the rig
+*Documentation lives outside `godot/` in `berkas/GodotDocs/` so `godot/` stays clean code/assets only.*
 
-```
-Main (Node3D)
-├─ XROrigin3D
-│   ├─ XRCamera3D
-│   ├─ LeftHand  (XRController3D, tracker = left_hand)
-│   │   └─ HandTip (Area3D, sphere radius ≈ 0.04 m)
-│   └─ RightHand (XRController3D, tracker = right_hand)
-│       └─ HandTip
-└─ Session (instanced scenes go here, the "additive" equivalent)
-```
+---
 
-### 5.3 Hit detection (same maths as `gameplay/02` §6.C)
+## 4. Hybrid OpenXR Input Architecture (Hand Tracking Primary + Controller Fallback) **[D]**
 
-```gdscript
-static func segment_hit(p0: Vector3, p1: Vector3, centre: Vector3, radius: float) -> bool:
-    var closest := Geometry3D.get_closest_point_to_segment(centre, p0, p1)
-    return closest.distance_to(centre) <= radius
-```
-The segment test prevents tunnelling when the hand moves several centimetres per frame at 72 Hz. **[V]** (verify `Geometry3D.get_closest_point_to_segment` signature in your Godot version).
+Both PICO 4 Ultra and Meta Quest 3 support standard OpenXR Hand Tracking (`openxr/extensions/hand_tracking=true` and `hand_interaction_profile=true` are already enabled in `godot/project.godot`).
 
-### 5.4 Platform service
+### 4.1 Unified Hand Input Abstraction (`Platform` / `Main`)
+Do NOT read controller nodes directly inside mechanics. Instead, `main.gd` resolves an active `HandInputFrame` each tick for Left and Right hands:
+- **Priority 1 — OpenXR Hand Tracking (`XRHandTracker` `/user/hand_tracker/left|right`):**
+  - `position_local_spec`: Index-tip (for poke/reach) or Palm center (for punch/push/row) transformed via `BodyFrame.from_godot_world()`.
+  - `wrist_roll_deg`: Derived from `XRHandTracker.HAND_JOINT_WRIST` / `HAND_JOINT_PALM` basis roll (used by `M09` Tea Ceremony Pour).
+  - `is_pinching`: Thumb-tip to Index-tip distance `<= 0.025 m` OR `hand_interaction_ext` `pinch_ext` action (for menu/calibration confirm).
+  - `is_grasping`: Average finger curl / `grasp_ext` action (for `M05` Temple Bell Pull, `M09` Tea Pour, `M10` Bamboo Sway).
+  - `is_tracked`: `tracker.has_tracking_data` (used for lap auto-pause fallback if hands drop below camera FoV).
+- **Priority 2 — Handheld Controller Fallback (`XRController3D` `left_hand` / `right_hand`):**
+  - Automatically active whenever `XRController3D.get_has_tracking_data()` is true and hand tracker is inactive (e.g., low-light rooms or user preference).
+  - `is_pinching` ← `trigger_click` / `ax_button`; `is_grasping` ← `grip_click` (`grip > 0.5`).
+  - Haptics (`Platform.play_haptic_*`) fire only when controllers are active; Dojo Audio + Visual Juice fires in **both** modes!
+- **Priority 3 — Desktop Simulator:** Mouse + Keyboard (`Q/E + Mouse`, `Tab`, `Space`, `K`, `L`, `R`, `M`, `Esc`).
 
-```gdscript
-# autoload/platform.gd
-extends Node
-func play_haptic(hand: String, amplitude: float, duration_s: float) -> void:
-    var ctrl: XRController3D = get_tree().root.find_child(hand + "Hand", true, false)
-    if ctrl:
-        ctrl.trigger_haptic_pulse("haptic", 0.0, amplitude, duration_s, 0.0)
-func set_passthrough(enabled: bool) -> void:
-    # switch the environment blend mode (alpha blend = passthrough) via OpenXRInterface [V]
-    pass
-```
-The action name `"haptic"` must exist in the action map. **[V]**
+### 4.2 Zero-Raycast Rule During `ROUND_PLAY`
+- Any UI raycast node (if used for menus) MUST set `enabled = false` and `visible = false` whenever `GameFlow.current_state == ROUND_PLAY`.
 
-## 6. Testing without a headset
+---
 
-| Tool | Use |
-|---|---|
-| **Desktop simulator rig** (you build it: two `Node3D` hands moved with mouse/keyboard) | Test calibration logic, spawning, scoring, UI flow. Equivalent of Unity's EditorSim. |
-| **Meta XR Simulator** | The Godot Meta Toolkit includes a setup tool that makes the editor launch the simulator on Play **[V]**. |
-| **GUT tests** | All formulas in `gameplay/16`. |
+## 5. Multi-Platform Render Budget (PICO 4 Ultra, Meta Quest 3, & Quest 2 Baseline) **[D]**
 
-Same limits as Unity: simulators cannot show tracking feel, haptics, comfort, or real frame time.
+Both PICO 4 Ultra and Meta Quest 3 run **Snapdragon XR2 Gen 2**, while lab testing may also include **Quest 2** (`72 Hz = 13.89 ms/frame` budget; `90 Hz = 11.11 ms/frame`). Target the strict budget below so every headset holds locked frame rate without reprojection or motion sickness:
 
-## 7. Parity matrix (fill this in as you go)
+| Budget Item | Hard Limit | Implementation Rules |
+|---|---|---|
+| **Total Scene Triangles** | **<= 200,000 – 350,000 tris/frame** | Zen Dojo room `<= 120k tris`; Zeno mascot `~19.9k tris` (use optimized GA3 mesh, NEVER the unoptimized 66.4k mesh); active gameplay props `< 3k tris` each. |
+| **Draw Calls** | **<= 80 – 120 / frame** | Merge static Dojo meshes sharing materials in Blender; reuse `StandardMaterial3D` instances across targets. |
+| **Lighting & Shadows** | **Max 1 `DirectionalLight3D`**; **NO real-time shadows** on static Dojo | Use baked lightmaps or soft ambient + simple unshaded/fake contact shadows. Real-time shadows are the #1 mobile VR FPS killer. |
+| **Textures** | `<= 2048×2048` (Dojo walls/floor), `<= 512–1024` (props) | Never ship `4096×4096` textures on small props in the active scene. Keep `ETC2/ASTC` compression enabled. |
+| **Post-Processing** | **Disabled** (no SSAO, SSR, Volumetric Fog, heavy Glow) | MSAA `2x` max. |
+| **Particles & VFX** | **<= 30 particles** per hit burst (`CPUParticles3D` / `GPUParticles3D`, unshaded) | Pre-warm particle materials at Boot to avoid mid-round shader stutter. |
 
-| Feature | Spec | Unity | Godot |
-|---|---|---|---|
-| Spec-space conversion + tests | §3.1 above | n/a | ☐ |
-| BodyFrame + base calibration + save/load | `gameplay/01` | ☐ | ☐ |
-| Segment hit detection | `gameplay/02` §6.C | ☐ | ☐ |
-| Score Attack loop (draw, timer, results, combo) | `gameplay/00` §5, `13` | ☐ | ☐ |
-| **M01** Asteroid Brawler | §6.1 | ☐ | ☐ |
-| **M06** Force Blast | §6.6 | ☐ | ☐ |
-| **M07** Shield Crank | §6.7 | ☐ | ☐ |
-| Safety: pause, lap rest, rest reminder | `gameplay/14` | ☐ | ☐ |
-| Haptics | `gameplay/15` §9.1 | ☐ | ☐ |
-| Recenter handling | `gameplay/01` §4.4 | ☐ | ☐ |
-| Passthrough / fallback (P2) | `02-quest-config.md` S-4 | ☐ | ☐ |
-| P1 / P2 mechanics | §6.2–6.10 | ☐ | ☐ |
+---
 
-A mechanic is "ported" only when its acceptance tests in `gameplay/16` pass in Godot **with the same numbers**.
+## 6. Headless Testing & Export Commands
 
-## 8. A/B comparison plan (week 7–8, real Quest)
-
-Install both builds on the **same headset**, use the **same testers**, alternate the order, and measure:
-
-| Metric | How to measure |
-|---|---|
-| Frame time | Frame budget `= 1000 / refresh_Hz` ms. Use Meta's OVR Metrics Tool on device **[V]**, plus the Unity Profiler / Godot performance monitors. |
-| Startup time | `adb shell am start -W <package>/<activity>` prints the launch time. |
-| Build size | APK size in MB. |
-| Tracking/hand feel | 1–5 rating from testers (same wording for both). |
-| Comfort | SSQ after each build. |
-| Stability | Crashes and pauses during 10 sessions. |
-
-**Simple problem (frame budget).** At 72 Hz the budget is `1000 / 72 = 13.89 ms`. At 90 Hz it is `1000 / 90 = 11.11 ms`.
-**Case study.** If Unity averages `11.2 ms` and Godot `12.9 ms` at 72 Hz: Unity headroom `= 13.89 − 11.2 = 2.69 ms` (19 %), Godot headroom `= 13.89 − 12.9 = 0.99 ms` (7 %). Both pass, but Godot has little room for the heavier P2 scenes.
-
-## 9. Risks
-
-| Risk | Mitigation |
-|---|---|
-| Rewrite eats the schedule | Port the P0 slice only; keep the parity matrix honest. |
-| XR features differ between engines (passthrough, haptics) | Hide behind `platform.gd`; test on a real Quest early. |
-| Handedness and yaw sign bugs | `spec_space.gd` + tests (§3.1). |
-| C# temptation | Stay on GDScript (G-02). |
-| Renderer problems on Android XR | Stay on Compatibility (G-03). |
-| Comparison is unfair (different art/effects) | Use identical assets and the same spec numbers. |
+- **Run Acceptance Tests:**
+  ```bash
+  godot --headless --xr-mode off --path godot -s res://tests/run_acceptance_tests.gd
+  ```
+- **USB Live Screen Cast & Recording (PICO 4 Ultra / Meta Quest):**
+  ```bash
+  ./godot/scripts/cast_vr_screen.sh
+  ./godot/scripts/cast_vr_screen.sh record demo.mp4
+  ```
+- **Export Presets (`godot/export_presets.cfg`):**
+  - `PICO 4 Ultra (Android OpenXR)` → `godot/build/ZenoFit-Godot-Pico4Ultra.apk` (`enable_pico_plugin=true`, `pico_xr_features/hand_tracking=true`)
+  - `Meta Quest (Android OpenXR)` → `godot/build/ZenoFit-Godot-Quest.apk` (`enable_meta_plugin=true`, `meta_xr_features/hand_tracking=1`)
+  - `Linux Desktop Simulator` → `godot/build/ZenoFit-Godot-Desktop.x86_64`

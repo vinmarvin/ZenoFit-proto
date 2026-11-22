@@ -1,35 +1,7 @@
-# Gameplay Overview
+# Gameplay Overview (v0.4 — Zen Dojo Arcade)
 
-> Part of the spec pack (Meta Quest focus). **Section numbers are global across all gameplay files**, so a reference like §6.3 always means the same thing (Glider Pilot). See the index below.
-> Legend: **[S]** from source PDF/research · **[D]** from your ZenoFit draft · **[P]** proposal, tune in testing · **[V]** verify.
-
----
-
-## 0. File index
-
-| File | Contains (global section numbers) |
-|---|---|
-| `00-gameplay-overview.md` | §1 goals · §2 app flow · §5 Score Attack session, difficulty, hand mode · §6 mechanics table · §11 build order · §12 out of scope |
-| `01-body-frame-and-calibration.md` | §3 BodyFrame · §4 calibration (base steps, module calibrations, obstacles, saved data) |
-| `02-targets-and-hit-detection.md` | §6.A shared rules · §6.B adaptive tempo · §6.C hit detection |
-| `03-m01-asteroid-brawler.md` | §6.1 Seated Boxing |
-| `04-m02-fruit-harvester.md` | §6.2 Overhead Reach |
-| `05-m03-glider-pilot.md` | §6.3 Side Arm Raise |
-| `06-m04-turret-gunner.md` | §6.4 Trunk Twist |
-| `07-m05-cosmic-tug-of-war.md` | §6.5 Seated Row |
-| `08-m06-force-blast.md` | §6.6 Forward Press |
-| `09-m07-shield-generator-crank.md` | §6.7 Arm Circles |
-| `10-m08-recon-scanner.md` | §6.8 Neck Mobility and Far Focus |
-| `11-m09-potion-brewer.md` | §6.9 Elbow Flexion and Wrist Pour |
-| `12-m10-laser-evader.md` | §6.10 Overhead Reach with Side Bend |
-| `13-scoring-and-score-attack.md` | §7 scoring, combo, results, progress |
-| `14-safety.md` | §8 safety system, mechanic safety levels |
-| `15-feedback-and-ui.md` | §9 haptics, audio, visual style, settings |
-| `16-acceptance-tests.md` | §10 acceptance tests |
-
-Research behind these choices: `../research/01-survey-analysis.md`.
-
-**How to make the spec more specific:** every mechanic file ends with a *Tunables* table (edit "Your value") and *Open questions*. Answer those and the **[P]** defaults become decisions.
+> Part of the **ZenoFit AI Reconstruction Spec Pack (Godot 4.7)**. **Section numbers are global across all gameplay files**, so §6.3 always refers to `M03` (*Crane Wings / Side Arm Raise*).
+> Legend: **[S]** source/research · **[D]** locked team decision · **[P]** tunable default · **[V]** verify on hardware.
 
 ---
 
@@ -37,123 +9,131 @@ Research behind these choices: `../research/01-survey-analysis.md`.
 
 | # | Goal | Source |
 |---|---|---|
-| G1 | The user is **seated the whole time**. No standing, squatting, or leg movement. | [D] [S] |
-| G2 | Every target is inside the user's **own comfortable range** (reach, twist, lean, neck turn). | [S] |
-| G3 | Score depends on **arm accuracy, rhythm, and smoothness**. Never on the lower body. | [S] |
-| G4 | **Zero unintended locomotion.** The world never moves the user. | [S] |
-| G5 | The user can **pause or stop at any time**, and can use **one hand or two**. | [S] |
-| G6 | Calm visuals, readable UI, soft audio. | [S] |
-| G7 | A session **fits a work break (about 3 minutes)**. It feels like a score chase, not a workout chore. | [D] |
-| G8 | Time from putting the headset on to the first target is short (≤ 30 s for returning users). | [P] from survey |
+| G1 | The user is **100% seated, upper-body only**. No standing, squatting, or leg movement. | [D] [S] |
+| G2 | Every target stays inside the user's **calibrated comfortable range** (`k <= 0.85`) and outside desk obstacles. | [S] |
+| G3 | Gameplay feels like a **snappy Zen Dojo Arcade Score Attack**, never a forced workout; scoring rewards real physical upper-body motion (**zero raycast / zero stationary-hand exploits**). | [D] |
+| G4 | **Zero unintended locomotion.** Fixed seated camera; Zen Dojo tatami & shoji provide a calm static visual reference frame. | [S] [D] |
+| G5 | Supports **Hybrid OpenXR Hand Tracking (primary) + Handheld Controller (fallback)**, one-hand or two-hand mode, and pause/stop at any time. | [D] [S] |
+| G6 | Mobile VR performance **72–90 FPS** on **PICO 4 Ultra** and **Meta Quest 2 / 3 / 3S**. | [D] |
+| G7 | Default **Quick Trial fits a 3-minute work break** (`5 rounds × 30 s`), with optional `6 min` / `10 min` Extended sessions. | [D] |
+| G8 | Returning user time-to-first-target is short (**<= 10 s Quick Seat Check**, <= 30 s total). | [D] [P] |
 
 ---
 
-## 2. App flow (state machine)
+## 2. App flow (v0.4 Player Flow State Machine)
 
-```
-Boot → MainMenu → [Calibration if needed] → SessionStart
-        ▲                                        │
-        │                                        ▼
-        │                      ┌──→ RoundIntro (4 s) → RoundPlay (30 s) → RoundOutro (2 s) ─┐
-        │                      └──────────────────────── ×5 rounds ←─────────────────────┘
-        └──────────────────────────── Results ←──────────────────────────────────────────
-Any Round state ⇄ Paused (menu button, lap rest, rest reminder, lean warning)
+```text
+Boot -> HandPresenceCheck -> [FirstLaunchSafetyNotice] -> MainMenu (Play | Settings | Credits | Quit)
+                                                              ▲
+      ┌───────────────────────────────────────────────────────┘
+      │  (Play)
+      ▼
+[Guided Calibration (first run, ~35s) OR Quick Seat Check (returning, <=10s)]
+      │
+      ▼
+RoutinePicker (Full Upper-Body Reset | Arms & Shoulders | Back & Posture) + Duration (3m | 6m | 10m)
+      │
+      ▼
+[Optional WarmUp (15–20 s, skippable — Xu et al. 2020 Guideline #1)]
+      │
+      ▼
+SessionStart ─► ┌──► RoundIntro (4 s, Zeno demo) ─► RoundPlay (30 s, NO raycast) ─► RoundOutro (2 s) ──┐
+                └── (5 rounds = 3m; 10/15 rounds = 6m/10m with MidSession Zen Breather Passthrough) ◄──┘
+      │
+      ▼
+Results (Total Score, Max Streak, Accuracy %, Dojo Mastery Rank, Personal Best, Body Areas Covered)
+      │
+      └──► Play Again / Routine Picker / Main Menu
+
+Any Round state ◄─► Paused (Lap Rest 2s + Passthrough, Lean Warning, Rest Reminder, Recenter, Stable Chair, Manual)
 ```
 
-| State | Entry | Exit |
+| State | Entry & Behaviour | Exit |
 |---|---|---|
-| **Boot** | App start. Init platform, XR rig, load saved profile. | Rig ready → MainMenu. |
-| **MainMenu** | After Boot / Results. *Play Score Attack*, *Practice*, *Recalibrate*, *Settings*, *Quit*. | *Play* → Calibration if no valid profile, else quick seat check → SessionStart. |
-| **Calibration** | First run, *Recalibrate*, or recenter event. | Success → save profile. |
-| **SessionStart** | Pick the 5 mechanics (§5.2). | → RoundIntro. |
-| **RoundIntro** | Show mechanic name, one-line instruction, safety note if Level B. | → RoundPlay. |
-| **RoundPlay** | 30 s of one mechanic. | Timer end → RoundOutro. |
-| **Results** | After round 5 or *Stop*. | *Again* / *Practice* / *Menu*. |
-| **Paused** | From any Round state. | *Resume* (3-2-1) or *Stop*. |
-
-`GP-FLOW-01` One `GameFlow` class owns all transitions; scenes load additively over `00_Boot`.
-`GP-FLOW-02` Resume includes a 3 s countdown **[P]**.
+| **Boot** | Init OpenXR (`Local`), load `calibration_profile.json`, `sessions.json`, `settings.json`, spawn Zen Dojo & ZenoBot. | Ready → `HandPresenceCheck` / `MainMenu`. |
+| **HandPresenceCheck** | If Hand Tracking active and hands not visible, Zeno raises palms (*"Raise both hands so I can see you!"*). Skipped if controllers are active. | Hands/controllers tracked → Notice (if first launch) or `MainMenu`. |
+| **MainMenu** | 4 primary buttons: **`Play`**, **`Settings`**, **`Credits`**, **`Quit`** (`get_tree().quit()` after confirm). Also offers *Practice Mode* drawer. | `Play` → Calibration / Quick Seat Check. |
+| **Calibration** | First run: Seat Anchor → Reach L/R (skip = One-Hand) → Lap Point → Desk Obstacles (optional) → **Chair Type Check** (Stable vs. Swivel = auto No-Trunk). Returning: **Quick Seat Check (`<= 10 s`)**. | Confirmed → save JSON → `RoutinePicker`. |
+| **RoutinePicker** | Select Routine (`Full Upper-Body Reset`, `Arms & Shoulders`, `Back & Posture`) + Duration (`3 min` default, `6 min`, `10 min`). Non-medical copy (NO *"Sores"*, NO leg/foot icons). | `Start` → Optional `WarmUp` → `SessionStart`. |
+| **WarmUp** *(optional)* | 15–20 s skippable gentle reach & wrist circle warm-up to reduce seated early misses (Xu et al., 2020). | Done / Skip → `SessionStart`. |
+| **SessionStart** | Draws balanced round lineup for chosen Routine, honoring `No-Trunk Mode` and non-consecutive `Level B`. | → `RoundIntro` (index 0). |
+| **RoundIntro** | `4.0 s`: shows Zen Dojo mechanic title, one-line cue, Safety Level B note if applicable, and Zeno procedural demo. | Timer → `RoundPlay`. |
+| **RoundPlay** | `30.0 s` active arcade round. **NO raycast.** Combo carries across rounds. | Timer → `RoundOutro`. |
+| **RoundOutro** | `2.0 s` round score summary; on Extended `6/10 min` sessions triggers a `20–30 s` **Zen Breather (Passthrough ON)** between 5-round stages. | Next round or `Results`. |
+| **Results** | Shows Total Score, Accuracy %, Hits/Misses, Max Streak, **Dojo Mastery Rank (`C / B / A / S / Zen Master`)**, **New Personal Best badge**, and Body Areas Covered. | *Play Again* / *Change Routine* / *Main Menu*. |
+| **Paused** | Instant freeze (within 1 frame); Resume runs a `3.0 s` countdown (`GP-FLOW-02`). | *Resume* / *Recalibrate* / *Stop → Results* / *Main Menu*. |
 
 ---
 
-## 5. Score Attack session, difficulty, hand mode
+## 5. Arcade Score Attack, 3 Routines, Difficulty, & Hand Mode
 
-### 5.1 Session structure **[D][P]**
+### 5.1 Session Structure & Durations **[D][P]**
 
-| Item | Default |
-|---|---|
-| Session | **180 s** = 5 rounds × (4 s intro + 30 s play + 2 s outro) |
-| Round | One mechanic, 30 s |
-| Rest reminder | every **8 min** of total play (range 7–10 **[S]**) |
-| Practice mode | Pick one mechanic, untimed rounds of 30 s, no combo reset between rounds |
+| Option | Structure | Notes |
+|---|---|---|
+| **Quick Trial (`3 min`, default)** | 5 rounds × `(4 s intro + 30 s play + 2 s outro)` = `180 s` | Fits a short desk break; optimal for neck comfort. |
+| **Extended (`6 min`)** | 2 stages × 5 rounds + 1 `20 s` *Zen Breather* (Passthrough) | For users wanting a longer session. |
+| **Extended (`10 min`)** | 3 stages × 5 rounds + 2 `30 s` *Zen Breathers* (Passthrough) | Mandatory mid-session breaks prevent neck/sopite fatigue (Xu et al. 2020). |
+| **Practice Mode** | Pick any 1 mechanic (`M01`–`M10`), 30 s rounds, no combo reset. | Ideal for learning form or testing a single mechanic. |
 
-### 5.2 Mechanic draw (balanced, random) `GP-SESS-01`
+### 5.2 Routine Draw Rules (`GP-SESS-01` & `GP-ROUTINE-01`) **[D]**
 
-Each mechanic belongs to one body-area group (§6 table). A session picks **5 distinct mechanics** such that:
-1. At least **one** comes from each of the three groups: *Neck & shoulders*, *Back/trunk*, *Chest/arms*.
-2. The remaining two are random from unused mechanics.
-3. Mechanics seen in the previous session get lower weight (×0.5) so players see variety **[P]**.
-4. Level B mechanics are excluded if **No-trunk mode** is on (`14` §8.8); the group rule then applies to the remaining mechanics.
+1. **Routine 1 — `FULL_UPPER_BODY` (*Full Upper-Body Reset*):**
+   - Draws **5 distinct mechanics** from all 10 (`M01`–`M10`), guaranteeing at least 1 from each body group (*Neck & Shoulders*, *Back/Trunk*, *Chest & Arms*), `×0.5` weight on mechanics from the previous session, and **never two `Level B` rounds consecutively**.
+2. **Routine 2 — `ARMS_AND_SHOULDERS` (*Arms & Shoulders*):**
+   - Draws **5 distinct mechanics** from the **6 `Level A` arm/shoulder pool**: `M01, M02, M03, M06, M07, M09` (`100% Level A` — safe on any swivel/rolling chair).
+3. **Routine 3 — `BACK_AND_POSTURE` (*Back & Posture*):**
+   - Draws **5 distinct mechanics** prioritizing the back/neck pool: `M05` (`Lvl A`), `M04` (`Lvl B`), `M08` (`Lvl B`), `M10` (`Lvl B`), plus **1 posture-opening shoulder mechanic** (`M02` or `M07`, `Lvl A`) interleaved so **`Level B` rounds are never consecutive** (e.g., `B - A - B - A - B` or `A - B - A - B - A`).
+   - If **`No-Trunk Mode`** is ON (swivel chair), excludes `M04, M08, M10` and fills the 5 rounds with `M05` + posture/arm `Level A` mechanics (`M02, M03, M07, M06`).
 
-**Simple problem.** The three groups have 4 + 3 + 3 mechanics. A session draws 1 from each group first (3 picks), then 2 more at random from the 7 left → 5 distinct mechanics total.
+### 5.3 Hand Mode `GP-HAND-01` **[S]**
+`Both hands` · `Left only` · `Right only`. Skipping a hand during calibration disables it and forces one-hand mode. All 10 mechanics (especially `M03`, `M05`, `M07`, `M09`) MUST gracefully support one-hand mode.
 
-### 5.3 Hand mode `GP-HAND-01` **[S]**
-`Both hands` · `Left only` · `Right only`. Disabled hands (calibration steps skipped) force one-hand mode.
-
-### 5.4 Difficulty presets **[P]**
+### 5.4 Difficulty Presets **[P]**
 
 | Parameter | Gentle | Standard | Active |
 |---|---|---|---|
-| Reach factor `k` | 0.60 | 0.75 | 0.85 (max **[S]**) |
+| Reach factor `k` | 0.60 | 0.75 | 0.85 (hard max **[S]**) |
 | Target radius | 0.12 m | 0.10 m | 0.08 m |
 | Start tempo (rhythm mechanics) | 50 BPM | **60 BPM [S]** | 70 BPM |
 | Max tempo | 70 BPM | 80 BPM | 90 BPM |
 | Target lifetime `L` | 3 beats | 2 beats | 2 beats |
 
-Mechanic-specific parameters (angles, cadence, hold times) are in each mechanic file.
-`GP-DIFF-01` Difficulty is adjusted through **distance (k), size, tempo/cadence, and hold times** only.
-`GP-DIFF-02` Tempo only increases when accuracy is stable (`02` §6.B).
+---
+
+## 6. The 10 Zen Dojo Arcade Mechanics (Week 14 Locked Scope)
+
+*(Rename enum IDs, class names, folders `godot/mechanics/m01_makiwara_strikes` .. `m10_bamboo_sway`, UI titles, hints, and props strictly to the Zen Dojo names below—do not leave old names.)*
+
+| § | ID | Zen Dojo Title | Real Movement | Group | Safety | Scoring Rule | Key v0.4 Code Fix Needed |
+|---|---|---|---|---|---|---|---|
+| 6.1 | `M01` | **Makiwara Strikes** | Light forward punches | Chest/arms | A | Speed + Timeliness | Require forward velocity `v_z >= 0.25 m/s` & guard return (`z <= 0.25 m`) to block stationary-hand cheat. |
+| 6.2 | `M02` | **Sakura Catch** | Diagonal reach up | Neck & shoulders | A | Timeliness + Golden | Add subtle arm-lower reset or alternating X/Y spread so holding hands static above head cannot auto-farm. |
+| 6.3 | `M03` | **Crane Wings** | Lateral raise (*scapular plane*) | Neck & shoulders | A | Accuracy + Wing Hold | **Fix partial:** validate span `>= 0.70 * calibrated_span` & abduction `θ ± 15°` before awarding `+10 pts/s`; support one-hand mode. |
+| 6.4 | `M04` | **Bokken Guard** | Seated torso rotation | Back/trunk | **B** | **Precision only** | Tighten chest distance `0.45 -> 0.35 m` + add head-hand yaw cross-check (`|ψ_head - ψ_hands| <= 20°`). |
+| 6.5 | `M05` | **Temple Bell Pull** | Two-hand seated row | Back/trunk | A | Full-stroke completion | **Fix partial:** track BOTH hands in `BOTH_HANDS` mode (fix `pick_hand_for_spawn(0)` bug), check grasp/grip, add `2.0 s` stroke timeout. |
+| 6.6 | `M06` | **Ki Palm Push** | Forward press + 2 s hold | Chest/arms | A | Charge + Sync bonus | Add mandatory retract hysteresis (`z <= z_plane - 0.10 m`) after cooldown before next charge starts. |
+| 6.7 | `M07` | **Zen Water Wheel** | Slow chest arm circles | Neck & shoulders | A | Smooth cadence band | **Fix partial:** evaluate BOTH hands (not right-only) and replace `absf(d_angle)` with **signed angle** matching `CW/CCW`. |
+| 6.8 | `M08` | **Zen Horizon Watch** | Slow neck yaw scan | Neck & shoulders | **B** | **Smoothness only** | **Fix partial:** add pitch check (`±20°`) and optional `20 s` Passthrough Far-Look Break cue. |
+| 6.9 | `M09` | **Tea Ceremony Pour** | Biceps curl + wrist pour | Chest/arms | A | Curl + Over-cup pour | **Fix partial:** validate hand is above cauldron/cup (`|x_hand - x_cup| <= 0.14 m`) during `wrist_roll >= 60°`; alternate hands in `BOTH_HANDS`. |
+| 6.10 | `M10` | **Bamboo Sway** | Overhead rail + side bend | Back/trunk | **B** | **Precision + Safe Lean** | **Fix partial:** validate hands are holding overhead bo-staff (`y_hand >= y_rail - 0.15 m`); pause wall if released. |
 
 ---
 
-## 6. The 10 mechanics (summary)
+## 11. Two-Week Sprint Plan to Week 14 User Evaluation **[D]**
 
-| § | Mechanic (theme) | Movement | Group | Safety level | Priority |
-|---|---|---|---|---|---|
-| 6.1 | Seated Boxing (Asteroid Brawler) | Light punches | Chest/arms | A | **P0** |
-| 6.2 | Overhead Reach (Fruit Harvester) | Diagonal reach up | Neck & shoulders | A | P1 |
-| 6.3 | Side Arm Raise (Glider Pilot) | Lateral raise, steer | Neck & shoulders | A | P1 |
-| 6.4 | Trunk Twist (Turret Gunner) | Torso rotation | Back/trunk | **B** | P2 |
-| 6.5 | Seated Row (Cosmic Tug-of-War) | Pull to waist | Back/trunk | A | P1 |
-| 6.6 | Forward Press (Force Blast) | Press and hold | Chest/arms | A | **P0** |
-| 6.7 | Arm Circles (Shield Generator Crank) | Slow circles | Neck & shoulders | A | **P0** |
-| 6.8 | Neck Mobility and Far Focus (Recon Scanner) | Slow head turns | Neck & shoulders | **B** | P2 |
-| 6.9 | Elbow Flexion and Wrist Pour (Potion Brewer) | Curl + wrist roll | Chest/arms | A | P1 |
-| 6.10 | Overhead Reach with Side Bend (Laser Evader) | Lean sideways | Back/trunk | **B** | P2 |
-
-Safety level **A** = arms only. Level **B** = trunk or neck movement (needs a stable-chair confirmation and its own calibration module).
-**P0** = vertical slice (built first, also the Godot parity slice, see `../04-workspace-and-antigravity.md`).
-
----
-
-## 11. Suggested build order (8 weeks) **[P]**
-
-| Week | Build | Verifiable without a headset? |
+| Sprint Slice | Owner | Deliverables |
 |---|---|---|
-| 1 | Unity setup, rig, `IPlatformServices`, EditorSim, Quest APK builds. | Build only |
-| 2 | Tracking, HandTip, segment hit detection (`02` §6.C), BodyFrame. | Mostly (simulator) |
-| 3 | Base calibration + save/load + obstacles; Score Attack loop skeleton (timer, draw, results). | Logic yes |
-| 4 | **P0:** M01 Asteroid Brawler, M06 Force Blast, M07 Shield Crank. | Logic yes |
-| 5 | **P1:** M02, M03, M05, M09. Godot parity slice starts (calibration + P0). | Logic yes |
-| 6 | **P2:** M04, M08, M10 + module calibrations (twist, neck, lean) + safety levels. Godot parity continues. | Logic yes; feel no |
-| 7 | UI polish, settings, results, functional + usability testing on **real Quest** (Unity and Godot builds). | **Needs headset** |
-| 8 | Fixes, A/B comparison report, documentation, demo build. | **Needs headset** |
-
-**Honest scope note:** 10 mechanics + a second engine in 8 weeks with no headset is tight. The framework (calibration, targets, hit detection, scoring) is shared, so each mechanic is small, but the P2 mechanics add calibration and safety work. If time runs short, cut Godot to the P0 slice only, not the mechanics.
+| **Slice 1 (Days 1–4)** | Architect | Implement anti-cheat fixes for `M01, M03, M04, M05, M06, M07, M08, M09, M10` + add `AT-29`–`AT-34` headless tests (all passing). |
+| **Slice 2 (Days 4–7)** | Architect + PM/UI | Implement `RoutinePicker` (3 Routines + `3/6/10 min`), `MainMenu` (`Play/Settings/Credits/Quit`), Optional `WarmUp`, **Dojo Mastery Rank + Personal Best** (`AT-35`), and **Hybrid OpenXR Hand Tracking** (`XRHandTracker` + controller fallback). |
+| **Slice 3 (Days 7–10)** | PM/UI + UX Research | Integrate **Zen Dojo Environment** (`<= 120k tris`), optimized **Zeno (`19.9k tris`)**, Dojo SFX audio (with combo pitch escalation) & lightweight hit particles; verify **72–90 FPS** on PICO 4 Ultra & Meta Quest 3. |
+| **Slice 4 (Days 11–14)** | Whole Team | Playtest bug-bash, build final APKs for PICO 4 Ultra & Meta Quest 3, run Week 14 user evaluation (task completion, IMI, MSAQ/SSQ vs. seated YouTube video baseline). |
 
 ---
 
-## 12. Out of scope (do not build) **[S]**
+## 12. Out of Scope (Do Not Build Before Week 14) **[D]**
 
-Hand tracking (requested by 2 of the 5 visible survey rows; revisit after the core loop works) · heart-rate sensors · biomechanics analysis · cloud storage · online leaderboards · virtual instructor · clinician dashboard · **posture multipliers** (draft add-on 2, high cost) · **a reminder that works while the app is closed** (needs a phone/desktop companion; see `../research/01-survey-analysis.md`).
-**Optional P2 add-on:** *Desk Mode* with passthrough (draft add-on 1), behind `IPlatformServices` (`../02-quest-config.md` spike S-4).
+- Extra new mechanics (`M11 Dojo Gate Opener`, `M12 Rei Breath`, `M13 Ink Spiral`) — *Post-Week 14 stretch only*.
+- Belt progression system (`White → Black Belt`) — *dropped; use Dojo Mastery Rank + Personal Best only*.
+- Off-headset break reminder companion app (phone/desktop).
+- Heart-rate sensors, eye tracking, foot/lower-body tracking, cloud storage, online leaderboards, clinician dashboards.

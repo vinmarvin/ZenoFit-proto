@@ -1,150 +1,78 @@
-# 04 — Workspace and Antigravity Workflow
+# 04 — Workspace Layout & AI Agent Revision Workflow (v0.4 — Godot 4.7 Only)
 
-> Legend: **[P]** proposal · **[V]** verify. Folder names are **placeholders**: adapt them to what already exists in your XR project root.
-> Goal: let Antigravity (your AI agent, running at the XR project root) work on **both** the Unity and the Godot build from one source of truth: the spec pack.
+> **Updated:** 2026-11-22 (Post-reorganization into 3 main folders: `berkas/`, `godot/`, `asset/`).
+> **Goal:** Give AI coding assistants clear, slice-by-slice prompts to upgrade `godot/` for the **Week 14 User Evaluation** in 2 weeks without breaking existing acceptance tests.
 
-## 1. How Antigravity reads rules (verified from its docs) **[V]**
+---
 
-- It loads rule files from your workspace folder **and from every parent folder up to the repository root**: `AGENTS.md`, `GEMINI.md`, or `.agents/rules/*.md` (legacy `.agent/rules/`).
-- **Directory-scoped rules:** when the agent reads or edits a file, it walks up the directory tree from that file and loads rules at each level. So a `unity/AGENTS.md` and a `godot/AGENTS.md` apply only when the agent works inside those folders.
-- `GEMINI.md` is Antigravity-only and takes precedence over `AGENTS.md`. `AGENTS.md` is also read by Claude Code, Cursor, and Codex, so it is the better default for shared rules.
-- Rule files can reference other files with `@` syntax, so a short rule file can point to the spec instead of copying it.
-- A third-party summary mentions a **12,000-character limit per rule file** **[V]**. Keep rule files short and point to the spec.
-- Versions differ (CLI vs app vs IDE). If a rule seems ignored, test with a harmless marker line ("when asked for the repo codename, answer ORBIT-CHECK") in a **new** conversation.
-
-## 2. Recommended folder layout **[P]**
-
-```
-xr-project/                      ← Antigravity workspace root (repository root)
-├─ AGENTS.md                     shared rules (short; points to spec/)
-├─ spec/                         THIS pack (source of truth). Contents of spec-pack/
-│   ├─ 00-README.md … 04-…
-│   ├─ gameplay/
-│   └─ research/                 anonymized analysis only (no raw CSV with names/IDs)
-├─ unity/ZenoFit/                existing Unity project
-│   └─ AGENTS.md                 Unity-only rules
-├─ godot/ZenoFit/                new Godot project
-│   └─ AGENTS.md                 Godot-only rules
-└─ docs/
-    ├─ unity-audit.md            output of the audit task (§4, task A)
-    └─ parity-matrix.md          copy of the table in 03-godot-build.md §7
-```
-
-- Use **one Git repository** for all of it, so the agent can see the spec, the Unity code, and the Godot code together.
-- `.gitignore`: Unity (`Library/`, `Temp/`, `Logs/`, `obj/`, `Builds/`, `UserSettings/`) and Godot (`.godot/`, `android/build/`, `*.apk`, `*.aab`). Keystores and signing passwords stay **outside** the repo.
-- Keep your raw survey CSV **outside** the repo (it contains names and student IDs).
-
-## 3. Rule file templates
-
-### 3.1 Root `AGENTS.md` (shared)
-
-```markdown
-# ZenoFit XR project: shared rules
-
-## What this is
-Seated VR fitness game for Meta Quest 2/3/3S. Two builds: Unity (primary) and Godot (parity test build).
-The single source of truth for behavior is `spec/`. Read `spec/00-README.md` first, then the gameplay
-file for the task (e.g. `spec/gameplay/08-m06-force-blast.md`).
-
-## Hard rules
-1. Do not change behavior, numbers, or formulas unless the spec says so. If the spec is wrong or unclear,
-   STOP and ask; propose a spec edit first.
-2. Numbers tagged [P] in the spec must be configurable (ScriptableObject in Unity, Resource in Godot).
-3. Controllers only. No hand tracking, no networking, no cloud, no analytics.
-4. No locomotion: never move, rotate, or scale the XR origin during gameplay.
-5. Never place a target outside the calibrated comfort range or inside an obstacle exclusion zone.
-6. Score depends only on arm accuracy and rhythm. Never on posture or the lower body.
-7. Do not edit anything under `spec/` unless explicitly asked.
-8. Do not add dependencies/packages/plugins without asking.
-9. Work in small slices. Plan first, then implement, then list what you changed and which acceptance
-   tests (`spec/gameplay/16-acceptance-tests.md`) you ran.
-
-## Safety wording
-The app is not a medical device. Never add health or treatment claims to UI text or docs.
-
-## Privacy
-Never read, copy, or commit raw survey files that contain names or student IDs.
-```
-
-### 3.2 `unity/AGENTS.md`
-
-```markdown
-# Unity build rules
-- Unity 6 (6000.x), C#, OpenXR + XR Interaction Toolkit 3.x, Input System, URP. Tracking origin = Device.
-- Meta/Quest-specific code only in `Assets/_Project/Scripts/Platform/Quest/`. Gameplay calls `IPlatformServices`.
-- Pure maths in plain C# classes with EditMode tests. MonoBehaviours stay thin.
-- Do not edit `Library/`, `Temp/`, `.meta` files by hand, or Packages/manifest.json without asking.
-- See `spec/01-techstack.md` and `spec/02-quest-config.md`.
-```
-
-### 3.3 `godot/AGENTS.md`
-
-```markdown
-# Godot build rules
-- Godot 4.6+ (check current stable), GDScript only, Compatibility renderer, OpenXR + OpenXR Vendors plugin.
-- Spec space is x right, y up, z FORWARD. Godot is z BACK. Convert ONLY via `core/spec_space.gd`.
-  Yaw: spec positive = turn right; Godot positive = turn left. See `spec/03-godot-build.md` §3.1.
-- Pure maths in `core/` with GUT tests that use the SAME numbers as `spec/gameplay/16-acceptance-tests.md`.
-- Platform-specific calls (haptics, passthrough) only through the `platform.gd` autoload.
-- Use a different Android package name from the Unity build. See `spec/03-godot-build.md`.
-- Port by spec, not by translating Unity files line by line. The Unity code is a reference for logic only.
-```
-
-## 4. Tasks to give Antigravity (copy-paste), in this order
-
-Run each task in a **new conversation**, review the plan before approving, and commit after each one.
-
-### Task A — Audit the existing Unity build (no code changes)
+## 1. Current Repository Structure
 
 ```text
-Read spec/00-README.md and spec/gameplay/00-gameplay-overview.md.
-Then inspect unity/ZenoFit (read-only). Do NOT modify any file.
-Write docs/unity-audit.md with a table: spec item (section number) | exists / partial / missing |
-file(s) where it is implemented | differences from the spec (numbers, formulas, behavior).
-Cover: calibration, hit detection, Score Attack loop, each of the 10 mechanics, safety, haptics,
-persistence, platform abstraction. End with the 10 most important gaps ordered by impact.
+XR-FP/
+├─ README.md                                  # Project map, Demo link, & GA3 Provenance Row
+├─ .gitignore                                 # Godot 4.x & Android build artifacts
+├─ berkas/
+│  ├─ BerkasFP/                               # Course submission copies (Proposal Contract, GA3)
+│  ├─ Ideation/                               # Zenofit Analysis.md, Jaras Pengguna.csv (anonymized), Xu et al. (2020)
+│  ├─ Exercise Analysis/                      # Reference PDFs + Godot forensic audit & architecture map
+│  └─ GodotDocs/                              # THIS spec pack + AGENTS.md + Developer guides
+├─ godot/                                     # Active Godot 4.7 OpenXR prototype (code & in-engine assets ONLY)
+└─ asset/                                     # Raw source 3D assets (Floating Mascots.glb, Zeno.obj)
 ```
-*Why first:* you built ZenoFit before the 10-mechanic spec. This task tells you what is real before anything gets ported. It also builds your own understanding of the codebase.
 
-### Task B — Fix the P0 gaps in Unity
+---
 
+## 2. Ordered AI Revision Tasks (Copy-Paste Prompts for Week 14 Sprint)
+
+Execute **one slice per session**, verify `godot --headless --xr-mode off --path godot -s res://tests/run_acceptance_tests.gd` passes (`0 failed`), then commit.
+
+### Slice 1 — Fix Partial Mechanics & Anti-Cheat (`AT-29`–`AT-34`)
 ```text
-Using docs/unity-audit.md and the spec, implement only the P0 items: calibration base steps,
-segment hit detection, Score Attack loop skeleton, M01, M06, M07. Show a plan first.
-Add EditMode tests for every formula in spec/gameplay/16-acceptance-tests.md that applies (AT-01, 05, 06, 07,
-08, 12, 13, 21, 22, 27). Do not touch P1/P2 mechanics.
+Read berkas/GodotDocs/AGENTS.md, berkas/GodotDocs/MarkdownGuideForAIReconstruction/02-targets-and-hit-detection.md,
+and 03-m01 through 12-m10 plus 16-acceptance-tests.md.
+Update godot/core/mechanics_math.gd and godot/mechanics/m01..m10 to:
+1. Enforce GP-ANTI-CHEAT-01 (no stationary-hand farming in M01, span+abduction check & one-hand fallback in M03,
+   0.35 m chest distance + head-hand yaw cross-check in M04, bilateral stroke + 2.0 s timeout in M05,
+   retract hysteresis in M06, bilateral signed-angle circles in M07, pitch check in M08,
+   over-cup horizontal check & alternating hands in M09, overhead rail hold check in M10).
+2. Rename all 10 mechanic enum IDs, class names, folders (`godot/mechanics/m01_makiwara_strikes` .. `m10_bamboo_sway`), UI titles, and `status_hint` strings strictly to the v0.4 Zen Dojo Arcade names (remove all old names).
+3. Keep AT-01..AT-28 passing AND add automated tests AT-29..AT-34 in godot/tests/test_acceptance_suite.gd.
+Run the headless acceptance test suite and report results.
 ```
 
-### Task C — Create the Godot skeleton
-
+### Slice 2 — Player Flow, 3 Routines, Main Menu (`Play/Settings/Credits/Quit`), & Rank/Personal Best (`AT-35`)
 ```text
-Create godot/ZenoFit following spec/03-godot-build.md sections 4 and 5. Include: project settings for OpenXR,
-the XR rig scene, platform.gd with a desktop simulator fallback, core/spec_space.gd with GUT tests for the
-z-flip and yaw-sign conversion. Do not implement mechanics yet. List every manual editor step I must do myself
-(export preset, Android build template, vendors plugin).
+Read berkas/GodotDocs/MarkdownGuideForAIReconstruction/00-gameplay-overview.md,
+13-scoring-and-score-attack.md, and 15-feedback-and-ui.md.
+Update godot/core/enums.gd, godot/core/session_draw.gd, godot/core/scoring.gd,
+godot/autoload/game_flow.gd, godot/autoload/save_service.gd, and godot/ui/world_ui.gd to:
+1. Add Main Menu buttons: Play, Settings, Credits, Quit (with confirmation -> get_tree().quit()).
+2. Add 3-area Routine Picker (Full Upper-Body Reset, Arms & Shoulders, Back & Posture)
+   + Duration selector (3 min default, 6 min, 10 min with mid-session Zen Breather) + optional skippable 15s Warm-Up.
+3. Add Dojo Mastery Rank (Novice C / Disciple B / Ronin A / Samurai S / Zen Master S+) and
+   local Personal Best per Routine in SaveService (NO belt progression, NO medical/clinical copy).
+4. Add Chair Type Check (Stable vs Swivel -> auto No-Trunk Mode) to calibration.
+5. Add automated test AT-35 and run the full headless acceptance suite.
 ```
 
-### Task D — Port one slice at a time
-
+### Slice 3 — Hybrid OpenXR Hand Tracking + Dojo Audio/Visual Arcade Juice
 ```text
-Port ONLY: <slice name, e.g. "segment hit detection + AT-13">.
-Use the spec and the Unity code as reference. Write the GUT tests first, with the same numbers as the
-acceptance tests. Then implement. Report which tests pass. Update docs/parity-matrix.md.
+Read berkas/GodotDocs/MarkdownGuideForAIReconstruction/03-godot-build.md §4, 14-safety.md, and 15-feedback-and-ui.md.
+Update godot/autoload/platform.gd, godot/main.gd, godot/safety/safety_monitors.gd, and godot/ui/world_ui.gd to:
+1. Support Hybrid OpenXR Hand Tracking (XRHandTracker palm/index-tip, wrist roll, pinch, grasp)
+   with automatic XRController3D fallback and Desktop Simulator compatibility.
+2. Disable all UI raycasts during ROUND_PLAY (GP-ANTI-CHEAT-01).
+3. Add Hand-Tracking FoV lap-drop fallback in AutoPauseMonitor (hands drop into lower lap zone then lose tracking >= 2.0 s -> auto-pause + passthrough).
+4. Add Dojo Audio SFX manager (taiko/wood/bell/tea/shoji cues with streak pitch escalation) and lightweight
+   unshaded 3D hit particle bursts + floating score labels so Hand Tracking feels responsive without haptics.
+Run headless tests and verify zero errors.
 ```
-Slice order: `core` maths → BodyFrame + calibration → Score Attack loop → M01 → M06 → M07.
 
-## 5. Working rules for you (not the agent)
-
-1. **Spec first:** if you change a behavior, change the spec file first, then ask the agent to follow.
-2. **One slice = one commit.** If a task touches more than ~10 files, split it.
-3. **Read what it wrote.** You are learning Unity and XR; skipping the review loses that benefit. Ask the agent to explain any formula it implements in your own spec's words.
-4. **Do not let both engines drift:** after any numeric change, re-run the tests in both projects.
-5. **Keep your attention narrow:** P0 slice first, both engines. Only then P1, then P2.
-
-## 6. Quick checklist before the first agent session
-
-- [ ] `spec-pack/` copied into `xr-project/spec/`.
-- [ ] Root `AGENTS.md`, `unity/AGENTS.md`, `godot/AGENTS.md` created (templates above).
-- [ ] Raw survey CSV removed from the repo (or ignored).
-- [ ] `.gitignore` updated for Unity and Godot.
-- [ ] Marker test done: new conversation, ask the agent to name the project's hard rules.
+### Slice 4 — Zen Dojo Environment Integration & Multi-Platform Render Budget Check
+```text
+Read berkas/GodotDocs/MarkdownGuideForAIReconstruction/03-godot-build.md §5.
+Integrate the approved Zen Dojo .glb environment and optimized Zeno mascot (~19.9k tris) into godot/main.tscn.
+Verify compliance with the mobile VR render budget (<= 200k–350k tris, <= 120 draw calls, max 1 DirectionalLight3D
+with no real-time room shadows, no SSAO/SSR/fog, textures <= 2048/1024, ETC2/ASTC).
+Verify exports for both PICO 4 Ultra (preset.0) and Meta Quest (preset.1).
+```

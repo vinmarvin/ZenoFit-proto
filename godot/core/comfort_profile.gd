@@ -69,7 +69,7 @@ func get_target_forward_distance(hand: int, k: float) -> float:
 	var clamped_k := clampf(k, 0.10, MAX_REACH_FACTOR_K)
 	return clamped_k * get_reach_forward_m(hand)
 
-## §6.6 Force Blast: Two-hand plane uses min(R_f,L, R_f,R) so neither arm is over-reached (AT-21)
+## §6.6 Ki Palm Push: Two-hand plane uses min(R_f,L, R_f,R) so neither arm is over-reached (AT-21)
 func get_two_hand_forward_distance(k: float) -> float:
 	var clamped_k := clampf(k, 0.10, MAX_REACH_FACTOR_K)
 	if left_enabled and right_enabled:
