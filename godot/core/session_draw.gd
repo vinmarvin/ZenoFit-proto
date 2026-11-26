@@ -1,196 +1,71 @@
 class_name SessionDraw
 extends RefCounted
 
-## Balanced randomized 5-mechanic draw for Score Attack (00-gameplay-overview.md §5.2, 14-safety.md §8.8, AT-26, AT-28).
-## Rules:
-## 1. At least one mechanic from each of the 3 groups (Neck & shoulders, Back/trunk, Chest/arms).
-## 2. Remaining two are random from unused mechanics.
-## 3. Mechanics seen in the previous session get lower weight (x0.5).
-## 4. Level B mechanics (M04, M08, M10) are excluded if no_trunk_mode is true.
-## 5. No consecutive Level B rounds in the 5-round schedule (§8.8).
-## 6. If the user declines stable-chair confirmation on a Level B round, substitute an unused Level A mechanic (AT-28).
+## Curated 7-exercise registry, category filters, and Quick Break 5-round playlist generator.
+## Guarantees coverage across Active, Mobility, and Posture with no consecutive Level B rounds.
 
-static func get_all_mechanics() -> Array[int]:
+static func get_all_exercises() -> Array[int]:
 	return [
-		ZenoEnums.MechanicId.M01_MAKIWARA_STRIKES,
-		ZenoEnums.MechanicId.M02_SAKURA_CATCH,
-		ZenoEnums.MechanicId.M03_CRANE_WINGS,
-		ZenoEnums.MechanicId.M04_BOKKEN_GUARD,
-		ZenoEnums.MechanicId.M05_TEMPLE_BELL_PULL,
-		ZenoEnums.MechanicId.M06_KI_PALM_PUSH,
-		ZenoEnums.MechanicId.M07_ZEN_WATER_WHEEL,
-		ZenoEnums.MechanicId.M08_ZEN_HORIZON_WATCH,
-		ZenoEnums.MechanicId.M09_TEA_CEREMONY_POUR,
-		ZenoEnums.MechanicId.M10_BAMBOO_SWAY
+		ZenoEnums.ExerciseId.BOARD_SMASH,
+		ZenoEnums.ExerciseId.WIDE_SPLIT,
+		ZenoEnums.ExerciseId.SKY_REACH,
+		ZenoEnums.ExerciseId.ORBIT_FLOW,
+		ZenoEnums.ExerciseId.WRIST_TWIST,
+		ZenoEnums.ExerciseId.TORSO_TWIST,
+		ZenoEnums.ExerciseId.HORIZON_GAZE
 	]
 
-## Draws upper-body routines aligned to v0.4 Routine Picker options while obeying
-## no_trunk_mode and non-consecutive Level B constraints.
-static func draw_for_routine(
-	routine_id: int,
-	no_trunk_mode: bool = false,
-	previous_session_mechanics: Array[int] = [],
-	rng: RandomNumberGenerator = null,
-	round_count: int = -1
-) -> Array[int]:
-	if rng == null:
-		rng = RandomNumberGenerator.new()
-		rng.randomize()
+static func get_exercises_by_category(category: int) -> Array[int]:
+	if category == ZenoEnums.ExerciseCategory.ALL:
+		return get_all_exercises()
+	var out: Array[int] = []
+	for id in get_all_exercises():
+		if ZenoEnums.get_exercise_category(id) == category:
+			out.append(id)
+	return out
 
-	if routine_id == ZenoEnums.RoutineId.FULL_UPPER_DOJO:
-		var base := draw_five_mechanics(no_trunk_mode, previous_session_mechanics, rng)
-		var target_n := round_count if round_count > 0 else 5
-		if target_n <= 5:
-			return base.slice(0, target_n)
-		# Extend deterministically without consecutive Level B for 10-min extended sessions
-		var extra_pool: Array[int] = []
-		for m in get_all_mechanics():
-			if no_trunk_mode and ZenoEnums.get_mechanic_safety_level(m) == ZenoEnums.SafetyLevel.LEVEL_B:
-				continue
-			if not base.has(m):
-				extra_pool.append(m)
-		_shuffle_array(extra_pool, rng)
-		for m in extra_pool:
-			if base.size() >= target_n:
-				break
-			var prev_b := ZenoEnums.get_mechanic_safety_level(base[base.size() - 1]) == ZenoEnums.SafetyLevel.LEVEL_B
-			if prev_b and ZenoEnums.get_mechanic_safety_level(m) == ZenoEnums.SafetyLevel.LEVEL_B:
-				continue
-			base.append(m)
-		while base.size() < target_n:
-			base.append(base[base.size() % 5] if ZenoEnums.get_mechanic_safety_level(base[base.size() % 5]) == ZenoEnums.SafetyLevel.LEVEL_A else ZenoEnums.MechanicId.M01_MAKIWARA_STRIKES)
-		return base
-
-	var preferred: Array[int] = []
-	var default_rounds := 3
-	if routine_id == ZenoEnums.RoutineId.SHOULDER_NECK_REFRESH:
-		preferred = [
-			ZenoEnums.MechanicId.M02_SAKURA_CATCH,
-			ZenoEnums.MechanicId.M03_CRANE_WINGS,
-			ZenoEnums.MechanicId.M07_ZEN_WATER_WHEEL,
-			ZenoEnums.MechanicId.M08_ZEN_HORIZON_WATCH
-		]
-		default_rounds = 3
-	else:
-		# POSTURE_MOBILITY_FLOW
-		preferred = [
-			ZenoEnums.MechanicId.M05_TEMPLE_BELL_PULL,
-			ZenoEnums.MechanicId.M06_KI_PALM_PUSH,
-			ZenoEnums.MechanicId.M04_BOKKEN_GUARD,
-			ZenoEnums.MechanicId.M10_BAMBOO_SWAY,
-			ZenoEnums.MechanicId.M01_MAKIWARA_STRIKES
-		]
-		default_rounds = 4
-
-	var filtered: Array[int] = []
-	for m in preferred:
-		if no_trunk_mode and ZenoEnums.get_mechanic_safety_level(m) == ZenoEnums.SafetyLevel.LEVEL_B:
-			continue
-		filtered.append(m)
-
-	var fallback_order := [
-		ZenoEnums.MechanicId.M01_MAKIWARA_STRIKES,
-		ZenoEnums.MechanicId.M02_SAKURA_CATCH,
-		ZenoEnums.MechanicId.M03_CRANE_WINGS,
-		ZenoEnums.MechanicId.M05_TEMPLE_BELL_PULL,
-		ZenoEnums.MechanicId.M06_KI_PALM_PUSH,
-		ZenoEnums.MechanicId.M07_ZEN_WATER_WHEEL,
-		ZenoEnums.MechanicId.M09_TEA_CEREMONY_POUR
-	]
-	var target_rounds := round_count if round_count > 0 else default_rounds
-	for m in fallback_order:
-		if filtered.size() >= target_rounds:
-			break
-		if not filtered.has(m):
-			filtered.append(m)
-
-	var chosen := filtered.slice(0, min(target_rounds, filtered.size()))
-	while chosen.size() < target_rounds:
-		chosen.append(fallback_order[chosen.size() % fallback_order.size()])
-	return _arrange_without_consecutive_level_b(chosen, rng)
-
-static func draw_five_mechanics(
-	no_trunk_mode: bool = false,
-	previous_session_mechanics: Array[int] = [],
+static func draw_quick_break_mix(
+	previous_lineup: Array[int] = [],
 	rng: RandomNumberGenerator = null
 ) -> Array[int]:
 	if rng == null:
 		rng = RandomNumberGenerator.new()
 		rng.randomize()
 
-	var candidates: Array[int] = []
-	for m in get_all_mechanics():
-		if no_trunk_mode and ZenoEnums.get_mechanic_safety_level(m) == ZenoEnums.SafetyLevel.LEVEL_B:
-			continue
-		candidates.append(m)
-
-	var groups := [
-		ZenoEnums.MechanicGroup.NECK_AND_SHOULDERS,
-		ZenoEnums.MechanicGroup.BACK_TRUNK,
-		ZenoEnums.MechanicGroup.CHEST_ARMS
+	var categories := [
+		ZenoEnums.ExerciseCategory.ACTIVE,
+		ZenoEnums.ExerciseCategory.MOBILITY,
+		ZenoEnums.ExerciseCategory.POSTURE
 	]
-
 	var selected: Array[int] = []
 
-	# Step 1: Pick 1 from each group
-	for g in groups:
-		var group_pool: Array[int] = []
-		for m in candidates:
-			if ZenoEnums.get_mechanic_group(m) == g and not selected.has(m):
-				group_pool.append(m)
-		if group_pool.size() > 0:
-			var pick := _weighted_pick(group_pool, previous_session_mechanics, rng)
-			selected.append(pick)
+	# Step 1: Guarantee at least 1 exercise from each focus category
+	for cat in categories:
+		var pool := get_exercises_by_category(cat)
+		if not pool.is_empty():
+			selected.append(_weighted_pick(pool, previous_lineup, rng))
 
-	# Step 2: Pick remaining up to 5 from unused candidates (preventing >3 Level B so non-consecutive ordering is always possible)
+	# Step 2: Fill up to 5 distinct exercises without exceeding 2 Level B rounds
 	while selected.size() < 5:
 		var remaining: Array[int] = []
-		var current_level_b_count := _count_level_b(selected)
-		for m in candidates:
-			if selected.has(m):
+		var level_b_count := _count_level_b(selected)
+		for id in get_all_exercises():
+			if selected.has(id):
 				continue
-			if current_level_b_count >= 2 and ZenoEnums.get_mechanic_safety_level(m) == ZenoEnums.SafetyLevel.LEVEL_B:
+			if level_b_count >= 2 and ZenoEnums.get_exercise_safety_level(id) == ZenoEnums.SafetyLevel.LEVEL_B:
 				continue
-			remaining.append(m)
-		if remaining.is_empty():
-			for m in candidates:
-				if not selected.has(m):
-					remaining.append(m)
+			remaining.append(id)
 		if remaining.is_empty():
 			break
-		var pick := _weighted_pick(remaining, previous_session_mechanics, rng)
-		selected.append(pick)
+		selected.append(_weighted_pick(remaining, previous_lineup, rng))
 
 	return _arrange_without_consecutive_level_b(selected, rng)
 
-## AT-28: If user declines stable-chair confirmation, substitute an unused Level A mechanic.
-static func substitute_level_a_mechanic(current_lineup: Array[int], replace_index: int) -> int:
-	var all_mechs := get_all_mechanics()
-	# Prefer a Level A mechanic in the same body-area group first
-	var old_mech := current_lineup[replace_index] if replace_index >= 0 and replace_index < current_lineup.size() else ZenoEnums.MechanicId.M04_BOKKEN_GUARD
-	var target_group := ZenoEnums.get_mechanic_group(old_mech)
-
-	for m in all_mechs:
-		if ZenoEnums.get_mechanic_safety_level(m) == ZenoEnums.SafetyLevel.LEVEL_A \
-			and ZenoEnums.get_mechanic_group(m) == target_group \
-			and not current_lineup.has(m):
-			if replace_index >= 0 and replace_index < current_lineup.size():
-				current_lineup[replace_index] = m
-			return m
-
-	for m in all_mechs:
-		if ZenoEnums.get_mechanic_safety_level(m) == ZenoEnums.SafetyLevel.LEVEL_A and not current_lineup.has(m):
-			if replace_index >= 0 and replace_index < current_lineup.size():
-				current_lineup[replace_index] = m
-			return m
-
-	return ZenoEnums.MechanicId.M05_TEMPLE_BELL_PULL
-
 static func _weighted_pick(pool: Array[int], prev_seen: Array[int], rng: RandomNumberGenerator) -> int:
 	var weights: Array[float] = []
-	var total_w: float = 0.0
-	for m in pool:
-		var w := 0.5 if prev_seen.has(m) else 1.0
+	var total_w := 0.0
+	for id in pool:
+		var w := 0.5 if prev_seen.has(id) else 1.0
 		weights.append(w)
 		total_w += w
 	var roll := rng.randf() * total_w
@@ -203,21 +78,20 @@ static func _weighted_pick(pool: Array[int], prev_seen: Array[int], rng: RandomN
 
 static func _count_level_b(list: Array[int]) -> int:
 	var c := 0
-	for m in list:
-		if ZenoEnums.get_mechanic_safety_level(m) == ZenoEnums.SafetyLevel.LEVEL_B:
+	for id in list:
+		if ZenoEnums.get_exercise_safety_level(id) == ZenoEnums.SafetyLevel.LEVEL_B:
 			c += 1
 	return c
 
 static func _arrange_without_consecutive_level_b(lineup: Array[int], rng: RandomNumberGenerator) -> Array[int]:
 	var level_b: Array[int] = []
 	var level_a: Array[int] = []
-	for m in lineup:
-		if ZenoEnums.get_mechanic_safety_level(m) == ZenoEnums.SafetyLevel.LEVEL_B:
-			level_b.append(m)
+	for id in lineup:
+		if ZenoEnums.get_exercise_safety_level(id) == ZenoEnums.SafetyLevel.LEVEL_B:
+			level_b.append(id)
 		else:
-			level_a.append(m)
+			level_a.append(id)
 
-	# Shuffle both pools
 	_shuffle_array(level_a, rng)
 	_shuffle_array(level_b, rng)
 
@@ -228,12 +102,11 @@ static func _arrange_without_consecutive_level_b(lineup: Array[int], rng: Random
 		_shuffle_array(combined, rng)
 		return combined
 
-	# Interleave Level B with Level A so two Level B mechanics are never adjacent
 	var result: Array[int] = []
 	var b_idx := 0
 	var a_idx := 0
 	for slot in range(lineup.size()):
-		var prev_is_b := result.size() > 0 and ZenoEnums.get_mechanic_safety_level(result[result.size() - 1]) == ZenoEnums.SafetyLevel.LEVEL_B
+		var prev_is_b := result.size() > 0 and ZenoEnums.get_exercise_safety_level(result[result.size() - 1]) == ZenoEnums.SafetyLevel.LEVEL_B
 		var remaining_slots := lineup.size() - slot
 		var remaining_b := level_b.size() - b_idx
 		if not prev_is_b and remaining_b > 0 and (remaining_b * 2 - 1 >= remaining_slots or a_idx >= level_a.size()):

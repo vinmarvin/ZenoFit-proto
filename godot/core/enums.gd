@@ -3,165 +3,214 @@ extends RefCounted
 
 enum AppState {
 	BOOT,
+	WELCOME,
 	MAIN_MENU,
-	ROUTINE_PICKER,
+	EXERCISE_SELECT,
+	EXERCISE_PREVIEW,
 	CALIBRATION,
-	WARM_UP,
 	SESSION_START,
 	ROUND_INTRO,
 	ROUND_PLAY,
 	ROUND_OUTRO,
 	PAUSED,
 	RESULTS,
-	CREDITS
+	SETTINGS,
+	TUTORIAL,
+	CREDITS,
+	EXIT_CONFIRM
 }
 
-enum RoutineId {
-	SHOULDER_NECK_REFRESH = 1,
-	POSTURE_MOBILITY_FLOW = 2,
-	FULL_UPPER_DOJO = 3
+enum ExerciseId {
+	BOARD_SMASH = 1,
+	WIDE_SPLIT = 2,
+	SKY_REACH = 3,
+	ORBIT_FLOW = 4,
+	WRIST_TWIST = 5,
+	TORSO_TWIST = 6,
+	HORIZON_GAZE = 7
+}
+
+enum ExerciseCategory {
+	ALL = 0,
+	ACTIVE = 1,
+	MOBILITY = 2,
+	POSTURE = 3
+}
+
+enum InputMode {
+	CONTROLLER = 0,
+	HAND_TRACKING = 1
 }
 
 enum DifficultyTier {
-	GENTLE,
-	STANDARD,
-	ACTIVE
+	GENTLE = 0,
+	STANDARD = 1,
+	ACTIVE = 2
 }
 
 enum HandMode {
-	BOTH_HANDS,
-	LEFT_ONLY,
-	RIGHT_ONLY
+	BOTH_HANDS = 0,
+	LEFT_ONLY = 1,
+	RIGHT_ONLY = 2
 }
 
 enum Hand {
-	LEFT,
-	RIGHT
+	LEFT = 0,
+	RIGHT = 1
 }
 
 enum TargetHand {
-	LEFT,
-	RIGHT,
-	EITHER,
-	BOTH
-}
-
-enum MechanicId {
-	M01_MAKIWARA_STRIKES = 1,
-	M02_SAKURA_CATCH = 2,
-	M03_CRANE_WINGS = 3,
-	M04_BOKKEN_GUARD = 4,
-	M05_TEMPLE_BELL_PULL = 5,
-	M06_KI_PALM_PUSH = 6,
-	M07_ZEN_WATER_WHEEL = 7,
-	M08_ZEN_HORIZON_WATCH = 8,
-	M09_TEA_CEREMONY_POUR = 9,
-	M10_BAMBOO_SWAY = 10
-}
-
-enum MechanicGroup {
-	NECK_AND_SHOULDERS,
-	BACK_TRUNK,
-	CHEST_ARMS
+	LEFT = 0,
+	RIGHT = 1,
+	EITHER = 2,
+	BOTH = 3
 }
 
 enum SafetyLevel {
-	LEVEL_A,
-	LEVEL_B
+	LEVEL_A = 0,
+	LEVEL_B = 1
 }
 
 enum PauseReason {
-	NONE,
-	MANUAL,
-	AUTO_PAUSE_LAP,
-	REST_REMINDER,
-	LEAN_WARNING,
-	RECENTER_REQUIRED,
-	STABLE_CHAIR_CONFIRMATION
+	NONE = 0,
+	MANUAL = 1,
+	AUTO_PAUSE_LAP = 2,
+	REST_REMINDER = 3,
+	LEAN_WARNING = 4,
+	RECENTER_REQUIRED = 5,
+	INPUT_LOST = 6
 }
 
 enum CalibrationStep {
 	SEAT_ANCHOR = 1,
-	CHAIR_CHECK = 2,
-	CHEST_POINT = 3,
-	SHOULDERS = 4,
-	LEFT_REACH = 5,
-	RIGHT_REACH = 6,
-	LAP_POINT = 7,
-	OBSTACLES = 8,
-	MODULE_TWIST = 9,
-	MODULE_NECK = 10,
-	MODULE_LEAN = 11,
-	COMPLETE = 12
+	COMFORT_REACH = 2,
+	LAP_ZONE = 3,
+	COMPLETE = 4
 }
 
-static func get_mechanic_title(m: int) -> String:
-	match m:
-		MechanicId.M01_MAKIWARA_STRIKES: return "M01: Makiwara Strikes (Seated Boxing)"
-		MechanicId.M02_SAKURA_CATCH: return "M02: Sakura Catch (Overhead Reach)"
-		MechanicId.M03_CRANE_WINGS: return "M03: Crane Wings (Side Arm Raise)"
-		MechanicId.M04_BOKKEN_GUARD: return "M04: Bokken Guard (Trunk Twist)"
-		MechanicId.M05_TEMPLE_BELL_PULL: return "M05: Temple Bell Pull (Seated Row)"
-		MechanicId.M06_KI_PALM_PUSH: return "M06: Ki Palm Push (Forward Press)"
-		MechanicId.M07_ZEN_WATER_WHEEL: return "M07: Zen Water Wheel (Arm Circles)"
-		MechanicId.M08_ZEN_HORIZON_WATCH: return "M08: Zen Horizon Watch (Neck Mobility)"
-		MechanicId.M09_TEA_CEREMONY_POUR: return "M09: Tea Ceremony Pour (Curl & Wrist Pour)"
-		MechanicId.M10_BAMBOO_SWAY: return "M10: Bamboo Sway (Side Bend)"
-		_: return "Unknown Exercise"
+static func get_exercise_title(id: int) -> String:
+	match id:
+		ExerciseId.BOARD_SMASH: return "Board Smash"
+		ExerciseId.WIDE_SPLIT: return "Wide Split"
+		ExerciseId.SKY_REACH: return "Sky Reach"
+		ExerciseId.ORBIT_FLOW: return "Orbit Flow"
+		ExerciseId.WRIST_TWIST: return "Wrist Twist"
+		ExerciseId.TORSO_TWIST: return "Torso Twist"
+		ExerciseId.HORIZON_GAZE: return "Horizon Gaze"
+		_: return "Seated Flow"
 
-static func get_mechanic_instruction(m: int) -> String:
-	match m:
-		MechanicId.M01_MAKIWARA_STRIKES: return "Extend your punch smoothly to strike approaching makiwara pads on the beat within your comfort reach."
-		MechanicId.M02_SAKURA_CATCH: return "Reach diagonally forward-up to catch falling sakura petals before they drift past."
-		MechanicId.M03_CRANE_WINGS: return "Extend both arms wide above shoulder height; tilt gently to guide your crane through rings."
-		MechanicId.M04_BOKKEN_GUARD: return "Keep both hands near chest guard and rotate your upper torso to face side dojo targets."
-		MechanicId.M05_TEMPLE_BELL_PULL: return "Pull the temple bell rope smoothly with active hands from forward reach back toward your waist."
-		MechanicId.M06_KI_PALM_PUSH: return "Retract to chest, push the Ki plane forward to target depth, and hold steady for 2.0 s."
-		MechanicId.M07_ZEN_WATER_WHEEL: return "Rotate both hands in smooth wide chest-height circles to turn the bamboo water wheel."
-		MechanicId.M08_ZEN_HORIZON_WATCH: return "Turn your head slowly (<= 60 deg/s) across the Zen garden horizon to focus on lanterns."
-		MechanicId.M09_TEA_CEREMONY_POUR: return "Reach for matcha ladles, curl cleanly toward your shoulder, and rotate wrist (>= 60 deg) to pour."
-		MechanicId.M10_BAMBOO_SWAY: return "Hold both hands up on the overhead bamboo bar and sway your torso gently into the safe gap."
-		_: return ""
+static func get_exercise_tagline(id: int) -> String:
+	match id:
+		ExerciseId.BOARD_SMASH: return "Smash wooden boards on rhythm"
+		ExerciseId.WIDE_SPLIT: return "Open chest and upper back"
+		ExerciseId.SKY_REACH: return "Lift shoulders and open posture"
+		ExerciseId.ORBIT_FLOW: return "Smooth shoulder circle flow"
+		ExerciseId.WRIST_TWIST: return "Gentle wrist rotation anti-RSI"
+		ExerciseId.TORSO_TWIST: return "Rotate upper torso left and right"
+		ExerciseId.HORIZON_GAZE: return "Slow neck turns across horizon"
+		_: return "Comfortable seated movement"
 
-static func get_mechanic_group(m: int) -> int:
-	match m:
-		MechanicId.M02_SAKURA_CATCH, MechanicId.M03_CRANE_WINGS, MechanicId.M07_ZEN_WATER_WHEEL, MechanicId.M08_ZEN_HORIZON_WATCH:
-			return MechanicGroup.NECK_AND_SHOULDERS
-		MechanicId.M04_BOKKEN_GUARD, MechanicId.M05_TEMPLE_BELL_PULL, MechanicId.M10_BAMBOO_SWAY:
-			return MechanicGroup.BACK_TRUNK
-		MechanicId.M01_MAKIWARA_STRIKES, MechanicId.M06_KI_PALM_PUSH, MechanicId.M09_TEA_CEREMONY_POUR:
-			return MechanicGroup.CHEST_ARMS
+static func get_exercise_area(id: int) -> String:
+	match id:
+		ExerciseId.BOARD_SMASH: return "Arms & Chest"
+		ExerciseId.WIDE_SPLIT: return "Upper Back & Chest"
+		ExerciseId.SKY_REACH: return "Shoulders"
+		ExerciseId.ORBIT_FLOW: return "Shoulders & Mobility"
+		ExerciseId.WRIST_TWIST: return "Wrists & Forearms"
+		ExerciseId.TORSO_TWIST: return "Core & Spine"
+		ExerciseId.HORIZON_GAZE: return "Neck"
+		_: return "Upper Body"
+
+static func get_exercise_cue(id: int) -> String:
+	match id:
+		ExerciseId.BOARD_SMASH: return "Strike incoming boards smoothly"
+		ExerciseId.WIDE_SPLIT: return "Bring hands to chest, then split wide"
+		ExerciseId.SKY_REACH: return "Reach diagonally upward with control"
+		ExerciseId.ORBIT_FLOW: return "Trace steady circles along both rings"
+		ExerciseId.WRIST_TWIST: return "Keep forearms steady and rotate wrists"
+		ExerciseId.TORSO_TWIST: return "Hold hands near chest and turn your torso"
+		ExerciseId.HORIZON_GAZE: return "Turn your head slowly to each lantern"
+		_: return "Move comfortably within your reach"
+
+static func get_exercise_preview_steps(id: int) -> Array[String]:
+	match id:
+		ExerciseId.BOARD_SMASH:
+			return [
+				"Sit tall with relaxed shoulders and hands ready",
+				"Punch forward or at an angle to break incoming boards",
+				"Keep strokes crisp without over-leaning forward"
+			]
+		ExerciseId.WIDE_SPLIT:
+			return [
+				"Bring both hands together in front of your chest",
+				"Open both arms wide together to break both side boards",
+				"Return calmly to center to ready the next pair"
+			]
+		ExerciseId.SKY_REACH:
+			return [
+				"Keep your neck relaxed and eyes angled comfortably",
+				"Reach diagonally forward and up to touch each lantern",
+				"Lower your arm slightly between reaches"
+			]
+		ExerciseId.ORBIT_FLOW:
+			return [
+				"Hold both hands at comfortable chest height",
+				"Trace smooth, wide circles along the glowing rings",
+				"Switch direction calmly when the ring cue flips"
+			]
+		ExerciseId.WRIST_TWIST:
+			return [
+				"Rest your forearms comfortably inside the dial rings",
+				"Rotate your wrists gently to match the target angle",
+				"Hold briefly at the target until the dial chimes"
+			]
+		ExerciseId.TORSO_TWIST:
+			return [
+				"Sit steadily with both feet grounded on the floor",
+				"Keep hands close to your chest and turn your upper torso",
+				"Hold your aim on the side board to shatter it"
+			]
+		ExerciseId.HORIZON_GAZE:
+			return [
+				"Keep your shoulders relaxed and spine upright",
+				"Turn your head slowly toward each glowing lantern",
+				"Pause steadily for one second before turning back"
+			]
 		_:
-			return MechanicGroup.CHEST_ARMS
+			return [
+				"Sit comfortably upright in your chair",
+				"Follow Zeno's movement preview at your own pace",
+				"Stop anytime if you feel discomfort"
+			]
 
-static func get_mechanic_safety_level(m: int) -> int:
-	match m:
-		MechanicId.M04_BOKKEN_GUARD, MechanicId.M08_ZEN_HORIZON_WATCH, MechanicId.M10_BAMBOO_SWAY:
+static func get_exercise_category(id: int) -> int:
+	match id:
+		ExerciseId.BOARD_SMASH, ExerciseId.WIDE_SPLIT:
+			return ExerciseCategory.ACTIVE
+		ExerciseId.SKY_REACH, ExerciseId.ORBIT_FLOW, ExerciseId.WRIST_TWIST:
+			return ExerciseCategory.MOBILITY
+		ExerciseId.TORSO_TWIST, ExerciseId.HORIZON_GAZE:
+			return ExerciseCategory.POSTURE
+		_:
+			return ExerciseCategory.ACTIVE
+
+static func get_exercise_safety_level(id: int) -> int:
+	match id:
+		ExerciseId.TORSO_TWIST, ExerciseId.HORIZON_GAZE:
 			return SafetyLevel.LEVEL_B
 		_:
 			return SafetyLevel.LEVEL_A
 
-static func get_group_name(g: int) -> String:
-	match g:
-		MechanicGroup.NECK_AND_SHOULDERS: return "Neck & shoulders"
-		MechanicGroup.BACK_TRUNK: return "Back / trunk"
-		MechanicGroup.CHEST_ARMS: return "Chest & arms"
-		_: return "General"
+static func get_category_name(cat: int) -> String:
+	match cat:
+		ExerciseCategory.ALL: return "All Exercises"
+		ExerciseCategory.ACTIVE: return "Active"
+		ExerciseCategory.MOBILITY: return "Mobility"
+		ExerciseCategory.POSTURE: return "Posture"
+		_: return "All Exercises"
 
-static func get_routine_title(r: int) -> String:
-	match r:
-		RoutineId.SHOULDER_NECK_REFRESH: return "Shoulder & Neck Refresh"
-		RoutineId.POSTURE_MOBILITY_FLOW: return "Posture & Mobility Flow"
-		RoutineId.FULL_UPPER_DOJO: return "Full Upper-Body Dojo"
-		_: return "Dojo Session"
-
-static func get_routine_description(r: int) -> String:
-	match r:
-		RoutineId.SHOULDER_NECK_REFRESH:
-			return "Seated overhead reach, crane arm-raise, water-wheel circles, and slow garden gaze movement. Preventive active break; not a medical device."
-		RoutineId.POSTURE_MOBILITY_FLOW:
-			return "Seated bell pulls, forward Ki presses, boxing alignment, and gentle torso rotation for upright posture movement."
-		RoutineId.FULL_UPPER_DOJO:
-			return "Balanced multi-group upper-body session covering Neck & Shoulders, Back/Trunk, and Chest & Arms."
-		_:
-			return ""
+static func get_input_mode_name(mode: int) -> String:
+	match mode:
+		InputMode.CONTROLLER: return "Controllers"
+		InputMode.HAND_TRACKING: return "Hand Tracking"
+		_: return "Controllers"

@@ -1,12 +1,11 @@
 extends XROrigin3D
 
-## Main XR & Desktop Simulator Coordinator for ZenoFit v0.4 (Zen Dojo Arcade, Godot 4.7).
-## Owns:
-## - OpenXR initialization (Seated / Local reference space, Hybrid Hand Tracking + Controller fallback)
-## - Zen Dojo Environment (res://assets/Environment.glb) with 28 loose kitbash pieces stripped at runtime
-## - Mobile VR Render Budget (zero real-time shadows on static environment/props, CULL_DISABLED on shoji)
-## - CalibrationController, SafetyMonitors (Auto-Pause w/ FoV drop fallback, Lean Warning, Rest Reminder)
-## - Active Exercise (M01..M10), FloatingMascotCoach (Opsi 1 Welcome Wave), ZenoWorldUI, and procedural Dojo VFX/SFX
+## Main XR & Desktop Simulator Coordinator for ZenoFit v1.0.
+## Guarantees:
+## - Rock-solid stationary BodyFrame (never shifts vertically/laterally on head pitch or yaw)
+## - Strict Session Input Lock (Controller vs Hand Tracking never mid-switches)
+## - Zero UI raycast during ROUND_PLAY
+## - Integrated Japanese Minimalist Room + KarateBoard.glb + Zeno_WithTexture.glb
 
 @onready var xr_camera: XRCamera3D = $XRCamera3D
 @onready var left_controller: XRController3D = $LeftController
@@ -28,7 +27,6 @@ var lean_monitor: SafetyMonitors.LeanMonitor
 var rest_monitor: SafetyMonitors.RestReminderMonitor
 var active_mechanic: MechanicBase = null
 
-# Hand and head tracking state in SpecSpace / BodyFrame
 var _prev_left_local_spec: Vector3 = Vector3(-0.20, -0.10, 0.35)
 var _curr_left_local_spec: Vector3 = Vector3(-0.20, -0.10, 0.35)
 var _prev_right_local_spec: Vector3 = Vector3(0.20, -0.10, 0.35)
@@ -46,6 +44,9 @@ var _prev_right_pinch: bool = false
 var _left_speeds: Array[float] = [0.0, 0.0, 0.0]
 var _right_speeds: Array[float] = [0.0, 0.0, 0.0]
 var _prev_head_yaw_deg: float = 0.0
+var _input_lost_timer_s: float = 0.0
+
+# Desktop simulator state
 var _sim_left_depth_m: float = 0.45
 var _sim_right_depth_m: float = 0.45
 var _sim_wrist_roll_deg: float = 0.0
@@ -58,13 +59,14 @@ func _ready() -> void:
 	Platform.initialize_platform()
 	Platform.tracking_origin_recentered.connect(_on_tracking_origin_recentered)
 	Platform.audio_volume = float(GameFlow.settings.get("audio_volume", 0.8))
+	Platform.haptics_enabled = bool(GameFlow.settings.get("haptics_enabled", true))
 
 	_setup_environment_and_nodes()
 	_setup_controllers_and_tips()
 
 	calibration_ctrl = CalibrationController.new(GameFlow.profile)
 	auto_pause_monitor = SafetyMonitors.AutoPauseMonitor.new(0.15, 2.0)
-	lean_monitor = SafetyMonitors.LeanMonitor.new(0.20, 0.50)
+	lean_monitor = SafetyMonitors.LeanMonitor.new(0.22, 0.50)
 	rest_monitor = SafetyMonitors.RestReminderMonitor.new(float(GameFlow.settings.get("rest_reminder_minutes", 8.0)))
 
 	EventBus.state_changed.connect(_on_flow_state_changed)
@@ -77,13 +79,12 @@ func _ready() -> void:
 	GameFlow.complete_boot()
 
 func _setup_environment_and_nodes() -> void:
-	# Calm Zen lighting (Mobile VR render budget: 1 DirectionalLight3D, ZERO real-time shadows)
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.16, 0.17, 0.15)
+	env.background_color = Color(0.14, 0.16, 0.14)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.86, 0.84, 0.78)
-	env.ambient_light_energy = 0.78
+	env.ambient_light_color = Color(0.88, 0.86, 0.80)
+	env.ambient_light_energy = 0.82
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)
@@ -95,7 +96,6 @@ func _setup_environment_and_nodes() -> void:
 	dir_light.shadow_enabled = false
 	add_child(dir_light)
 
-	# Fallback seated floor disc (hidden if Zen Dojo Environment.glb loads)
 	floor_platform = MeshInstance3D.new()
 	floor_platform.name = "StaticSeatedReferencePlatform"
 	var cyl := CylinderMesh.new()
@@ -106,21 +106,21 @@ func _setup_environment_and_nodes() -> void:
 	floor_platform.position = Vector3(0.0, -0.95, 0.0)
 	floor_platform.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var floor_mat := StandardMaterial3D.new()
-	floor_mat.albedo_color = Color(0.18, 0.21, 0.16)
+	floor_mat.albedo_color = Color(0.16, 0.20, 0.16)
 	floor_mat.roughness = 0.9
 	floor_platform.material_override = floor_mat
 	add_child(floor_platform)
 
-	# Load Zen Dojo Room (Environment.glb) cleanly with stray kitbash pieces stripped
 	dojo_env_root = DojoEnvironmentLoader.load_and_clean_dojo_environment()
 	if dojo_env_root != null:
 		add_child(dojo_env_root)
 		floor_platform.visible = false
 
 	if not Platform.is_xr_active:
-		xr_camera.position = Vector3(0.0, 1.20, 0.0)
-		left_controller.position = Vector3(-0.22, 0.95, -0.38)
-		right_controller.position = Vector3(0.22, 0.95, -0.38)
+		xr_camera.fov = 50.0
+		xr_camera.position = Vector3(0.0, 1.18, 0.0)
+		left_controller.position = Vector3(-0.25, 0.88, -0.48)
+		right_controller.position = Vector3(0.25, 0.88, -0.48)
 
 	arena_root = Node3D.new()
 	arena_root.name = "SessionArena"
@@ -134,27 +134,18 @@ func _setup_environment_and_nodes() -> void:
 	world_ui.name = "WorldUI"
 	world_ui.request_confirm_calibration_step.connect(_confirm_calibration_step)
 	world_ui.request_skip_calibration_step.connect(_skip_calibration_step)
-	world_ui.request_mark_obstacle.connect(_mark_calibration_obstacle)
+	world_ui.request_recenter_view.connect(_recenter_seated_view)
 	world_ui.request_auto_action.connect(_trigger_auto_action)
-	world_ui.request_poke_mascot.connect(func(): mascot_coach.trigger_poke_reaction(ZenoEnums.Hand.RIGHT))
-	world_ui.request_toggle_mascot_quality.connect(_toggle_mascot_quality)
 	add_child(world_ui)
 
-func _toggle_mascot_quality() -> void:
-	var next_hq := not bool(GameFlow.settings.get("mascot_high_quality", true))
-	GameFlow.settings["mascot_high_quality"] = next_hq
-	SaveService.save_settings(GameFlow.settings)
-	mascot_coach.set_quality_mode(next_hq)
-	world_ui._rebuild_buttons_for_state(GameFlow.current_state)
-
 func _setup_controllers_and_tips() -> void:
-	left_tip_visual = _create_hand_tip(Color(0.20, 0.65, 1.0), "LeftHandTip")
-	right_tip_visual = _create_hand_tip(Color(1.0, 0.58, 0.20), "RightHandTip")
+	left_tip_visual = _create_hand_tip(Color(0.32, 0.85, 0.72), "LeftHandTip")
+	right_tip_visual = _create_hand_tip(Color(0.95, 0.68, 0.28), "RightHandTip")
 	add_child(left_tip_visual)
 	add_child(right_tip_visual)
 
-	left_menu_ray = _create_menu_ray(left_controller, Color(0.35, 0.85, 1.0, 0.35))
-	right_menu_ray = _create_menu_ray(right_controller, Color(1.0, 0.75, 0.35, 0.35))
+	left_menu_ray = _create_menu_ray(left_controller, Color(0.45, 0.88, 0.78, 0.35))
+	right_menu_ray = _create_menu_ray(right_controller, Color(0.95, 0.78, 0.42, 0.35))
 
 	left_controller.button_pressed.connect(_on_xr_button_pressed.bind(ZenoEnums.Hand.LEFT))
 	right_controller.button_pressed.connect(_on_xr_button_pressed.bind(ZenoEnums.Hand.RIGHT))
@@ -180,12 +171,12 @@ func _create_menu_ray(ctrl: XRController3D, col: Color) -> MeshInstance3D:
 	var ray := MeshInstance3D.new()
 	ray.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var cyl := CylinderMesh.new()
-	cyl.top_radius = 0.004
-	cyl.bottom_radius = 0.004
-	cyl.height = 1.2
+	cyl.top_radius = 0.003
+	cyl.bottom_radius = 0.003
+	cyl.height = 1.4
 	ray.mesh = cyl
 	ray.rotation_degrees = Vector3(90.0, 0.0, 0.0)
-	ray.position = Vector3(0.0, 0.0, -0.6)
+	ray.position = Vector3(0.0, 0.0, -0.7)
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = col
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -193,23 +184,27 @@ func _create_menu_ray(ctrl: XRController3D, col: Color) -> MeshInstance3D:
 	ctrl.add_child(ray)
 	return ray
 
-## Raycast pointer beams are strictly forbidden during ROUND_PLAY (v0.4 §1 anti-raycast).
+## Raycast pointers are strictly OFF during ROUND_PLAY.
 func is_ui_raycast_enabled() -> bool:
 	return GameFlow.current_state != ZenoEnums.AppState.ROUND_PLAY
 
 func _rebuild_body_frame_from_camera() -> void:
+	var head_spec := SpecSpace.to_spec(xr_camera.global_position)
+	GameFlow.seated_height_m = clampf(head_spec.y, 0.70, 1.80) if head_spec.y > 0.2 else 1.18
 	GameFlow.body_frame = BodyFrame.rebuild_from_godot_head(
 		xr_camera.global_position,
 		xr_camera.global_transform.basis,
 		GameFlow.profile.chest_offset_from_head_m
 	)
-	if Platform.is_xr_active:
-		var fwd_y := (-xr_camera.global_transform.basis.z).y
-		GameFlow.body_frame.origin_spec.y = xr_camera.global_position.y + fwd_y * 0.55 - 0.10
 	GameFlow.seat_anchor_local_spec = GameFlow.body_frame.from_godot_world(xr_camera.global_position)
 	calibration_ctrl.current_body_frame = GameFlow.body_frame
 	calibration_ctrl.seat_anchor_local_spec = GameFlow.seat_anchor_local_spec
+	calibration_ctrl.seated_height_m = GameFlow.seated_height_m
 	_sync_dojo_floor_transform()
+
+func _recenter_seated_view() -> void:
+	_rebuild_body_frame_from_camera()
+	Platform.play_sfx("menu_click", 0)
 
 func _sync_dojo_floor_transform() -> void:
 	var floor_world := GameFlow.body_frame.to_godot_world(Vector3(0.0, -0.68, 0.0))
@@ -218,26 +213,50 @@ func _sync_dojo_floor_transform() -> void:
 	if floor_platform != null:
 		floor_platform.global_position = floor_world
 
+func _get_effective_input_mode() -> int:
+	var in_round := (
+		GameFlow.current_state == ZenoEnums.AppState.ROUND_INTRO
+		or GameFlow.current_state == ZenoEnums.AppState.ROUND_PLAY
+		or GameFlow.current_state == ZenoEnums.AppState.ROUND_OUTRO
+	)
+	return GameFlow.active_input_mode if in_round else int(GameFlow.settings.get("input_mode", ZenoEnums.InputMode.CONTROLLER))
+
 func _process(delta: float) -> void:
 	_handle_desktop_simulator_input(delta)
 	_sync_xr_camera_body_frame()
-	_update_tracked_poses(delta)
+	var mode := _get_effective_input_mode()
+	_update_tracked_poses(delta, mode)
 
 	var allow_ray := is_ui_raycast_enabled()
+	var show_ctrl_ray := allow_ray and Platform.is_xr_active and mode == ZenoEnums.InputMode.CONTROLLER
 	if left_menu_ray != null:
-		left_menu_ray.visible = allow_ray and Platform.is_xr_active and _left_tracked
+		left_menu_ray.visible = show_ctrl_ray and _left_tracked
 	if right_menu_ray != null:
-		right_menu_ray.visible = allow_ray and Platform.is_xr_active and _right_tracked
+		right_menu_ray.visible = show_ctrl_ray and _right_tracked
 
+	var active_hand_view := (
+		GameFlow.current_state == ZenoEnums.AppState.CALIBRATION
+		or GameFlow.current_state == ZenoEnums.AppState.ROUND_INTRO
+		or GameFlow.current_state == ZenoEnums.AppState.ROUND_PLAY
+		or GameFlow.current_state == ZenoEnums.AppState.ROUND_OUTRO
+	)
 	if left_tip_visual != null:
-		left_tip_visual.visible = _left_tracked or not Platform.is_xr_active
+		left_tip_visual.visible = (_left_tracked and Platform.is_xr_active) or (not Platform.is_xr_active and (active_hand_view or Input.is_key_pressed(KEY_Q)))
 		left_tip_visual.global_position = _left_world_pos
 	if right_tip_visual != null:
-		right_tip_visual.visible = _right_tracked or not Platform.is_xr_active
+		right_tip_visual.visible = (_right_tracked and Platform.is_xr_active) or (not Platform.is_xr_active and (active_hand_view or Input.is_key_pressed(KEY_E)))
 		right_tip_visual.global_position = _right_world_pos
 
 	_sync_dojo_floor_transform()
 	GameFlow.advance_round_timer(delta)
+
+	var in_round_state := (
+		GameFlow.current_state == ZenoEnums.AppState.ROUND_INTRO
+		or GameFlow.current_state == ZenoEnums.AppState.ROUND_PLAY
+		or GameFlow.current_state == ZenoEnums.AppState.ROUND_OUTRO
+	)
+	if arena_root != null:
+		arena_root.visible = in_round_state
 
 	if GameFlow.current_state == ZenoEnums.AppState.ROUND_PLAY:
 		_evaluate_safety_monitors(delta)
@@ -283,12 +302,17 @@ func _process(delta: float) -> void:
 		delta
 	)
 
-	# 3D Beat-Saber Panel Hover Pointer (Desktop Mouse or VR Controller; strictly OFF in ROUND_PLAY)
 	if is_ui_raycast_enabled():
 		if Platform.is_xr_active:
-			var ctrl := right_controller if _right_tracked else left_controller
-			if ctrl != null:
-				world_ui.process_pointer_ray(ctrl.global_position, -ctrl.global_transform.basis.z, false, false, false)
+			var ui_ray := Platform.get_ui_pointer_ray(
+				ZenoEnums.Hand.RIGHT if _right_tracked else ZenoEnums.Hand.LEFT,
+				right_controller if _right_tracked else left_controller,
+				mode
+			)
+			if bool(ui_ray["valid"]):
+				world_ui.process_pointer_ray(ui_ray["origin"], ui_ray["dir"], false, false, false)
+			else:
+				world_ui.hide_pointer_dot()
 		elif not Input.is_key_pressed(KEY_Q) and not Input.is_key_pressed(KEY_E):
 			var mp := get_viewport().get_mouse_position()
 			var r_orig := xr_camera.project_ray_origin(mp)
@@ -297,6 +321,8 @@ func _process(delta: float) -> void:
 	else:
 		world_ui.hide_pointer_dot()
 
+## Anchors BodyFrame ONLY once on initial valid XR pose or during Calibration Step 1 (SEAT_ANCHOR).
+## Zero per-frame chest/floor shifting when head pitches or turns!
 func _sync_xr_camera_body_frame() -> void:
 	if not Platform.is_xr_active:
 		return
@@ -306,15 +332,10 @@ func _sync_xr_camera_body_frame() -> void:
 		return
 	if GameFlow.current_state == ZenoEnums.AppState.CALIBRATION and calibration_ctrl.current_step == ZenoEnums.CalibrationStep.SEAT_ANCHOR:
 		_rebuild_body_frame_from_camera()
-	else:
-		var fwd_y := (-xr_camera.global_transform.basis.z).y
-		var expected_chest_y := xr_camera.global_position.y + fwd_y * 0.55 - 0.10
-		if absf(expected_chest_y - GameFlow.body_frame.origin_spec.y) > 0.04:
-			GameFlow.body_frame.origin_spec.y = lerpf(GameFlow.body_frame.origin_spec.y, expected_chest_y, 0.18)
 
-func _update_tracked_poses(dt: float) -> void:
-	var pose_l := Platform.sample_hybrid_hand_pose(ZenoEnums.Hand.LEFT, left_controller)
-	var pose_r := Platform.sample_hybrid_hand_pose(ZenoEnums.Hand.RIGHT, right_controller)
+func _update_tracked_poses(dt: float, input_mode: int) -> void:
+	var pose_l := Platform.sample_input_pose(ZenoEnums.Hand.LEFT, left_controller, input_mode)
+	var pose_r := Platform.sample_input_pose(ZenoEnums.Hand.RIGHT, right_controller, input_mode)
 
 	_left_tracked = bool(pose_l.get("tracked", true))
 	_right_tracked = bool(pose_r.get("tracked", true))
@@ -327,10 +348,11 @@ func _update_tracked_poses(dt: float) -> void:
 
 	var pinch_l := bool(pose_l.get("pinch", false))
 	var pinch_r := bool(pose_r.get("pinch", false))
-	if String(pose_l.get("source", "")) == "hand_tracking" and pinch_l and not _prev_left_pinch:
-		_on_xr_button_pressed("trigger_click", ZenoEnums.Hand.LEFT)
-	if String(pose_r.get("source", "")) == "hand_tracking" and pinch_r and not _prev_right_pinch:
-		_on_xr_button_pressed("trigger_click", ZenoEnums.Hand.RIGHT)
+	if input_mode == ZenoEnums.InputMode.HAND_TRACKING and Platform.is_xr_active:
+		if pinch_l and not _prev_left_pinch:
+			_on_xr_button_pressed("trigger_click", ZenoEnums.Hand.LEFT)
+		if pinch_r and not _prev_right_pinch:
+			_on_xr_button_pressed("trigger_click", ZenoEnums.Hand.RIGHT)
 	_prev_left_pinch = pinch_l
 	_prev_right_pinch = pinch_r
 
@@ -353,7 +375,6 @@ func _get_smoothed_speed(arr: Array[float]) -> float:
 	return sum / float(maxi(1, arr.size()))
 
 func _evaluate_safety_monitors(dt: float) -> void:
-	# 1. Auto-pause when both hands rest in lap for >= 2.0 s (with FoV tracking-loss fallback, AT-09)
 	if auto_pause_monitor.evaluate(
 		_curr_left_local_spec, _curr_right_local_spec,
 		GameFlow.profile.lap_point_from_chest_m, dt,
@@ -362,156 +383,156 @@ func _evaluate_safety_monitors(dt: float) -> void:
 		auto_pause_monitor.reset()
 		GameFlow.pause_session(
 			ZenoEnums.PauseReason.AUTO_PAUSE_LAP,
-			"Auto-Paused: Hands rested in lap for 2.0 s. Take a breather!"
+			"Hands rested in lap for 2 seconds. Take a breather!"
 		)
 		return
 
-	# 2. Lateral lean warning (§8.4 for Level A, §6.10 override for M10, AT-10)
-	var mech := GameFlow.get_current_mechanic_id()
-	var head_local := GameFlow.body_frame.from_godot_world(xr_camera.global_position)
-	if ZenoEnums.get_mechanic_safety_level(mech) == ZenoEnums.SafetyLevel.LEVEL_A:
-		if lean_monitor.evaluate(head_local.x, GameFlow.seat_anchor_local_spec.x, dt):
-			lean_monitor.reset()
-			GameFlow.pause_session(
-				ZenoEnums.PauseReason.LEAN_WARNING,
-				"Safety Pause: Please sit back in a stable, centered position."
-			)
-			return
-	elif mech == ZenoEnums.MechanicId.M10_BAMBOO_SWAY:
-		var max_lean := maxf(GameFlow.profile.lean_m_l, GameFlow.profile.lean_m_r)
-		var override_thresh := SafetyMonitors.LeanMonitor.get_m10_override_threshold(max_lean)
-		if lean_monitor.evaluate(head_local.x, GameFlow.seat_anchor_local_spec.x, dt, override_thresh):
-			lean_monitor.reset()
-			GameFlow.pause_session(
-				ZenoEnums.PauseReason.LEAN_WARNING,
-				"Safety Pause: Lean exceeded safe threshold (%.2f m). Sit back comfortably." % override_thresh
-			)
-			return
+	if Platform.is_xr_active:
+		var h_mode := int(GameFlow.settings.get("hand_mode", ZenoEnums.HandMode.BOTH_HANDS))
+		var need_l := (h_mode != ZenoEnums.HandMode.RIGHT_ONLY) and GameFlow.profile.left_enabled
+		var need_r := (h_mode != ZenoEnums.HandMode.LEFT_ONLY) and GameFlow.profile.right_enabled
+		var input_lost := (need_l and not _left_tracked) or (need_r and not _right_tracked)
+		if input_lost:
+			_input_lost_timer_s += dt
+			if _input_lost_timer_s >= 2.5:
+				_input_lost_timer_s = 0.0
+				GameFlow.pause_session(
+					ZenoEnums.PauseReason.INPUT_LOST,
+					"%s tracking was lost. Reconnect or switch input mode." % ZenoEnums.get_input_mode_name(GameFlow.active_input_mode)
+				)
+				return
+		else:
+			_input_lost_timer_s = 0.0
 
-	# 3. Rest reminder every 8 minutes (§8.3)
+	var head_local := GameFlow.body_frame.from_godot_world(xr_camera.global_position)
+	if lean_monitor.evaluate(head_local.x, GameFlow.seat_anchor_local_spec.x, dt):
+		lean_monitor.reset()
+		GameFlow.pause_session(
+			ZenoEnums.PauseReason.LEAN_WARNING,
+			"Please return to a centered, upright seated posture."
+		)
+		return
+
 	if rest_monitor.evaluate(dt):
 		GameFlow.pause_session(
 			ZenoEnums.PauseReason.REST_REMINDER,
-			"Rest Reminder: Relax your shoulders and neck from the headset weight."
+			"Time for a quick breather — relax your shoulders and neck."
 		)
 
 func _on_mascot_poked(_hand: int) -> void:
-	# Opsi 1 Main Menu Flow: tapping/poking Zeno on MAIN_MENU opens Routine Picker!
-	if GameFlow.current_state == ZenoEnums.AppState.MAIN_MENU:
-		Platform.play_dojo_sfx("gong", 0)
-		GameFlow.open_routine_picker_from_menu()
+	if GameFlow.current_state == ZenoEnums.AppState.WELCOME:
+		Platform.play_sfx("gong", 0)
+		GameFlow.continue_to_main_menu()
 
-func _on_target_hit_feedback(hand: int, points: int, streak: int, is_solid: bool) -> void:
-	var mech := GameFlow.get_current_mechanic_id()
-	var sfx := "chime"
-	if mech == ZenoEnums.MechanicId.M01_MAKIWARA_STRIKES or mech == ZenoEnums.MechanicId.M04_BOKKEN_GUARD or mech == ZenoEnums.MechanicId.M05_TEMPLE_BELL_PULL or mech == ZenoEnums.MechanicId.M06_KI_PALM_PUSH:
-		sfx = "wood_strike" if not is_solid else "gong"
-	Platform.play_dojo_sfx(sfx, streak)
-	_spawn_hit_burst_vfx(_left_world_pos if hand == ZenoEnums.Hand.LEFT else _right_world_pos, points, streak, is_solid)
+func _on_target_hit_feedback(_hand: int, _points: int, streak: int, _is_solid: bool) -> void:
+	var ex := GameFlow.get_current_exercise_id()
+	var sfx := "wood_crack" if (
+		ex == ZenoEnums.ExerciseId.BOARD_SMASH
+		or ex == ZenoEnums.ExerciseId.WIDE_SPLIT
+		or ex == ZenoEnums.ExerciseId.TORSO_TWIST
+	) else "chime"
+	Platform.play_sfx(sfx, streak)
+	_spawn_hit_burst_vfx(_left_world_pos if _hand == ZenoEnums.Hand.LEFT else _right_world_pos, _points, streak, _is_solid)
 
 func _on_target_missed_feedback() -> void:
-	Platform.play_dojo_sfx("miss", 0)
+	Platform.play_sfx("miss", 0)
 
 func _spawn_hit_burst_vfx(world_pos: Vector3, points: int, streak: int, is_solid: bool) -> void:
 	if arena_root == null or not is_inside_tree():
 		return
-	var popup := Label3D.new()
-	popup.text = "+%d%s" % [points, " (x%d)" % streak if streak >= 2 else ""]
-	popup.font_size = 30 if is_solid else 24
-	popup.pixel_size = 0.0024
-	popup.modulate = Color(1.0, 0.90, 0.30) if is_solid else Color(0.55, 1.0, 0.78)
-	popup.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	popup.global_position = world_pos + Vector3(0.0, 0.10, 0.0)
-	arena_root.add_child(popup)
+	var local_spec := GameFlow.body_frame.from_godot_world(world_pos)
+	var safe_spec := Vector3(
+		clampf(local_spec.x, -0.38, 0.38),
+		clampf(local_spec.y + 0.08, -0.02, 0.24),
+		clampf(local_spec.z, 1.05, 1.45)
+	)
+	var spawn_world := GameFlow.body_frame.to_godot_world(safe_spec)
 
-	var tw := create_tween()
+	var popup := Label3D.new()
+	popup.text = "+%d%s" % [points, " x%d" % streak if streak >= 2 else ""]
+	popup.font_size = 24 if is_solid else 20
+	popup.outline_size = 5
+	popup.pixel_size = 0.0010
+	popup.modulate = Color(0.95, 0.86, 0.42) if is_solid else Color(0.76, 0.94, 0.80)
+	popup.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	arena_root.add_child(popup)
+	popup.global_position = spawn_world
+
+	var tw := popup.create_tween()
 	tw.set_parallel(true)
-	tw.tween_property(popup, "global_position:y", world_pos.y + 0.34, 0.55)
-	tw.tween_property(popup, "modulate:a", 0.0, 0.55)
+	tw.tween_property(popup, "global_position:y", spawn_world.y + 0.16, 0.42)
+	tw.tween_property(popup, "modulate:a", 0.0, 0.42)
 	tw.chain().tween_callback(popup.queue_free)
 
 func _on_flow_state_changed(_prev: int, next_state: int) -> void:
+	if arena_root != null:
+		arena_root.visible = (
+			next_state == ZenoEnums.AppState.ROUND_INTRO
+			or next_state == ZenoEnums.AppState.ROUND_PLAY
+			or next_state == ZenoEnums.AppState.ROUND_OUTRO
+		)
 	if next_state == ZenoEnums.AppState.CALIBRATION:
 		calibration_ctrl.working_profile = GameFlow.profile
-		if GameFlow.has_valid_calibration:
-			calibration_ctrl.start_returning_user_quick_check()
-		else:
-			calibration_ctrl.start_full_calibration()
-	elif next_state == ZenoEnums.AppState.MAIN_MENU or next_state == ZenoEnums.AppState.RESULTS or next_state == ZenoEnums.AppState.ROUTINE_PICKER:
+		calibration_ctrl.start_calibration()
+	elif next_state == ZenoEnums.AppState.MAIN_MENU \
+		or next_state == ZenoEnums.AppState.RESULTS \
+		or next_state == ZenoEnums.AppState.EXERCISE_SELECT \
+		or next_state == ZenoEnums.AppState.EXERCISE_PREVIEW:
 		if active_mechanic != null:
 			active_mechanic.clear_arena()
 			active_mechanic = null
 	if next_state == ZenoEnums.AppState.RESULTS or next_state == ZenoEnums.AppState.SESSION_START:
-		Platform.play_dojo_sfx("gong", 0)
+		Platform.play_sfx("gong", 0)
 
-func _on_round_started(_round_idx: int, mechanic_id: int) -> void:
-	if Platform.is_xr_active and _round_idx == 0:
-		_rebuild_body_frame_from_camera()
+func _on_round_started(_round_idx: int, exercise_id: int) -> void:
 	auto_pause_monitor.reset()
 	lean_monitor.reset()
-	active_mechanic = _instantiate_mechanic(mechanic_id)
+	_input_lost_timer_s = 0.0
+	active_mechanic = _instantiate_exercise(exercise_id)
 	active_mechanic.setup(
-		mechanic_id,
+		exercise_id,
 		GameFlow.profile,
 		GameFlow.body_frame,
 		GameFlow.get_current_preset(),
 		int(GameFlow.settings.get("hand_mode", ZenoEnums.HandMode.BOTH_HANDS)),
 		arena_root
 	)
-	Platform.play_dojo_sfx("chime", 0)
+	Platform.play_sfx("chime", 0)
 
-func _instantiate_mechanic(mechanic_id: int) -> MechanicBase:
-	match mechanic_id:
-		ZenoEnums.MechanicId.M01_MAKIWARA_STRIKES: return M01MakiwaraStrikes.new()
-		ZenoEnums.MechanicId.M02_SAKURA_CATCH: return M02SakuraCatch.new()
-		ZenoEnums.MechanicId.M03_CRANE_WINGS: return M03CraneWings.new()
-		ZenoEnums.MechanicId.M04_BOKKEN_GUARD: return M04BokkenGuard.new()
-		ZenoEnums.MechanicId.M05_TEMPLE_BELL_PULL: return M05TempleBellPull.new()
-		ZenoEnums.MechanicId.M06_KI_PALM_PUSH: return M06KiPalmPush.new()
-		ZenoEnums.MechanicId.M07_ZEN_WATER_WHEEL: return M07ZenWaterWheel.new()
-		ZenoEnums.MechanicId.M08_ZEN_HORIZON_WATCH: return M08ZenHorizonWatch.new()
-		ZenoEnums.MechanicId.M09_TEA_CEREMONY_POUR: return M09TeaCeremonyPour.new()
-		ZenoEnums.MechanicId.M10_BAMBOO_SWAY: return M10BambooSway.new()
-		_: return M01MakiwaraStrikes.new()
+func _instantiate_exercise(exercise_id: int) -> MechanicBase:
+	match exercise_id:
+		ZenoEnums.ExerciseId.BOARD_SMASH: return BoardSmashMechanic.new()
+		ZenoEnums.ExerciseId.WIDE_SPLIT: return WideSplitMechanic.new()
+		ZenoEnums.ExerciseId.SKY_REACH: return SkyReachMechanic.new()
+		ZenoEnums.ExerciseId.ORBIT_FLOW: return OrbitFlowMechanic.new()
+		ZenoEnums.ExerciseId.WRIST_TWIST: return WristTwistMechanic.new()
+		ZenoEnums.ExerciseId.TORSO_TWIST: return TorsoTwistMechanic.new()
+		ZenoEnums.ExerciseId.HORIZON_GAZE: return HorizonGazeMechanic.new()
+		_: return BoardSmashMechanic.new()
 
-func _on_xr_button_pressed(action_name: String, _hand: int) -> void:
+func _on_xr_button_pressed(action_name: String, hand: int) -> void:
+	var mode := _get_effective_input_mode()
 	if action_name == "menu_button":
 		if GameFlow.current_state == ZenoEnums.AppState.PAUSED:
 			GameFlow.request_resume_with_countdown()
-		elif GameFlow.current_state == ZenoEnums.AppState.CREDITS or GameFlow.current_state == ZenoEnums.AppState.ROUTINE_PICKER or GameFlow.current_state == ZenoEnums.AppState.WARM_UP:
+		elif GameFlow.current_state == ZenoEnums.AppState.ROUND_INTRO or GameFlow.current_state == ZenoEnums.AppState.ROUND_PLAY or GameFlow.current_state == ZenoEnums.AppState.ROUND_OUTRO:
+			GameFlow.pause_session(ZenoEnums.PauseReason.MANUAL, "Session paused")
+		elif GameFlow.current_state != ZenoEnums.AppState.WELCOME and GameFlow.current_state != ZenoEnums.AppState.MAIN_MENU:
 			GameFlow.return_to_main_menu()
-		else:
-			GameFlow.pause_session(ZenoEnums.PauseReason.MANUAL, "Menu button pressed.")
 	elif action_name == "trigger_click" or action_name == "ax_button":
-		if action_name == "trigger_click" and is_ui_raycast_enabled() and Platform.is_xr_active:
-			var ctrl := left_controller if _hand == ZenoEnums.Hand.LEFT else right_controller
-			if ctrl != null:
-				var o := ctrl.global_position
-				var d := -ctrl.global_transform.basis.z
-				if world_ui.process_pointer_ray(o, d, true, true, false):
-					world_ui.process_pointer_ray(o, d, false, false, true)
-					return
+		if is_ui_raycast_enabled() and Platform.is_xr_active:
+			var ray := Platform.get_ui_pointer_ray(hand, left_controller if hand == ZenoEnums.Hand.LEFT else right_controller, mode)
+			if bool(ray["valid"]) and world_ui.process_pointer_ray(ray["origin"], ray["dir"], true, true, false):
+				world_ui.process_pointer_ray(ray["origin"], ray["dir"], false, false, true)
+				return
 		if GameFlow.current_state == ZenoEnums.AppState.CALIBRATION:
 			_confirm_calibration_step()
-		elif GameFlow.current_state == ZenoEnums.AppState.MAIN_MENU:
-			GameFlow.open_routine_picker_from_menu()
-		elif GameFlow.current_state == ZenoEnums.AppState.ROUTINE_PICKER:
-			GameFlow.select_routine_and_start(world_ui._picker_routine, world_ui._picker_duration_min, world_ui._picker_warmup)
-		elif GameFlow.current_state == ZenoEnums.AppState.WARM_UP:
-			GameFlow.skip_warmup()
 		elif GameFlow.current_state == ZenoEnums.AppState.PAUSED:
 			GameFlow.request_resume_with_countdown()
-		elif GameFlow.current_state == ZenoEnums.AppState.RESULTS:
-			GameFlow.begin_session()
 	elif action_name == "by_button":
 		if GameFlow.current_state == ZenoEnums.AppState.CALIBRATION:
 			_skip_calibration_step()
-		elif GameFlow.current_state == ZenoEnums.AppState.PAUSED and GameFlow.current_pause_reason == ZenoEnums.PauseReason.STABLE_CHAIR_CONFIRMATION:
-			GameFlow.decline_stable_chair_and_substitute()
-		elif GameFlow.current_state == ZenoEnums.AppState.MAIN_MENU or GameFlow.current_state == ZenoEnums.AppState.PAUSED:
-			_rebuild_body_frame_from_camera()
-			GameFlow.request_recalibrate()
-		elif GameFlow.current_state == ZenoEnums.AppState.RESULTS or GameFlow.current_state == ZenoEnums.AppState.ROUTINE_PICKER or GameFlow.current_state == ZenoEnums.AppState.CREDITS:
+		elif GameFlow.current_state != ZenoEnums.AppState.ROUND_PLAY and GameFlow.current_state != ZenoEnums.AppState.WELCOME:
 			GameFlow.return_to_main_menu()
 
 func _on_tracking_origin_recentered() -> void:
@@ -521,7 +542,7 @@ func _on_tracking_origin_recentered() -> void:
 		or GameFlow.current_state == ZenoEnums.AppState.ROUND_OUTRO:
 		GameFlow.pause_session(
 			ZenoEnums.PauseReason.RECENTER_REQUIRED,
-			"Headset Recentered: Sit comfortably and confirm your seated position to resume."
+			"View recentered. Confirm your seated posture to continue."
 		)
 
 func _confirm_calibration_step() -> void:
@@ -530,20 +551,12 @@ func _confirm_calibration_step() -> void:
 	var left_spec := SpecSpace.to_spec(_left_world_pos)
 	var right_spec := SpecSpace.to_spec(_right_world_pos)
 
-	if not Platform.is_xr_active:
-		match calibration_ctrl.current_step:
-			ZenoEnums.CalibrationStep.CHEST_POINT:
-				right_spec = head_spec + Vector3(0.0, -ComfortProfile.DEFAULT_CHEST_OFFSET_BELOW_HEAD_M, 0.08)
-			ZenoEnums.CalibrationStep.SHOULDERS:
-				left_spec = calibration_ctrl.current_body_frame.to_world_spec(Vector3(-0.20, 0.12, 0.0))
-				right_spec = calibration_ctrl.current_body_frame.to_world_spec(Vector3(0.20, 0.12, 0.0))
-			ZenoEnums.CalibrationStep.LEFT_REACH:
-				left_spec = calibration_ctrl.current_body_frame.to_world_spec(Vector3(-0.20, 0.0, 0.60))
-			ZenoEnums.CalibrationStep.RIGHT_REACH:
-				right_spec = calibration_ctrl.current_body_frame.to_world_spec(Vector3(0.20, 0.0, 0.60))
-			ZenoEnums.CalibrationStep.LAP_POINT:
-				left_spec = calibration_ctrl.current_body_frame.to_world_spec(Vector3(-0.10, -0.45, 0.20))
-				right_spec = calibration_ctrl.current_body_frame.to_world_spec(Vector3(0.10, -0.45, 0.20))
+	if not Platform.is_xr_active and calibration_ctrl.current_step == ZenoEnums.CalibrationStep.COMFORT_REACH:
+		left_spec = calibration_ctrl.current_body_frame.to_world_spec(Vector3(-0.20, 0.0, 0.60))
+		right_spec = calibration_ctrl.current_body_frame.to_world_spec(Vector3(0.20, 0.0, 0.60))
+	elif not Platform.is_xr_active and calibration_ctrl.current_step == ZenoEnums.CalibrationStep.LAP_ZONE:
+		left_spec = calibration_ctrl.current_body_frame.to_world_spec(Vector3(-0.10, -0.45, 0.20))
+		right_spec = calibration_ctrl.current_body_frame.to_world_spec(Vector3(0.10, -0.45, 0.20))
 
 	var done := calibration_ctrl.confirm_current_step(head_spec, head_fwd_spec, left_spec, right_spec)
 	if done:
@@ -551,7 +564,7 @@ func _confirm_calibration_step() -> void:
 			calibration_ctrl.working_profile,
 			calibration_ctrl.current_body_frame,
 			calibration_ctrl.seat_anchor_local_spec,
-			calibration_ctrl.is_swivel_chair
+			calibration_ctrl.seated_height_m
 		)
 
 func _skip_calibration_step() -> void:
@@ -561,12 +574,8 @@ func _skip_calibration_step() -> void:
 			calibration_ctrl.working_profile,
 			calibration_ctrl.current_body_frame,
 			calibration_ctrl.seat_anchor_local_spec,
-			calibration_ctrl.is_swivel_chair
+			calibration_ctrl.seated_height_m
 		)
-
-func _mark_calibration_obstacle() -> void:
-	var right_spec := SpecSpace.to_spec(_right_world_pos)
-	calibration_ctrl.mark_obstacle_point(right_spec)
 
 func _trigger_auto_action() -> void:
 	if active_mechanic != null and GameFlow.current_state == ZenoEnums.AppState.ROUND_PLAY:
@@ -576,7 +585,6 @@ func _handle_desktop_simulator_input(dt: float) -> void:
 	if Platform.is_xr_active:
 		return
 
-	# Smooth head rotation with arrow keys
 	if Input.is_key_pressed(KEY_LEFT):
 		_sim_cam_yaw_deg = clampf(_sim_cam_yaw_deg + 85.0 * dt, -85.0, 85.0)
 	if Input.is_key_pressed(KEY_RIGHT):
@@ -586,7 +594,6 @@ func _handle_desktop_simulator_input(dt: float) -> void:
 	if Input.is_key_pressed(KEY_DOWN):
 		_sim_cam_pitch_deg = clampf(_sim_cam_pitch_deg - 70.0 * dt, -50.0, 50.0)
 
-	# Move head closer / further (-Z forward in Godot) & lateral lean (Z/X)
 	if Input.is_key_pressed(KEY_W):
 		_sim_cam_offset_local.z = clampf(_sim_cam_offset_local.z - 0.65 * dt, -0.55, 0.45)
 	if Input.is_key_pressed(KEY_S):
@@ -596,22 +603,19 @@ func _handle_desktop_simulator_input(dt: float) -> void:
 	if Input.is_key_pressed(KEY_X):
 		_sim_cam_offset_local.x = clampf(_sim_cam_offset_local.x + 0.45 * dt, -0.32, 0.32)
 
-	# Wrist roll simulation ([ / ]) for M09 Tea Ceremony Pour
 	if Input.is_key_pressed(KEY_BRACKETLEFT):
-		_sim_wrist_roll_deg = clampf(_sim_wrist_roll_deg - 90.0 * dt, 0.0, 95.0)
+		_sim_wrist_roll_deg = clampf(_sim_wrist_roll_deg - 95.0 * dt, -95.0, 95.0)
 	if Input.is_key_pressed(KEY_BRACKETRIGHT):
-		_sim_wrist_roll_deg = clampf(_sim_wrist_roll_deg + 90.0 * dt, 0.0, 95.0)
+		_sim_wrist_roll_deg = clampf(_sim_wrist_roll_deg + 95.0 * dt, -95.0, 95.0)
 
-	xr_camera.position = Vector3(_sim_cam_offset_local.x, 1.20, _sim_cam_offset_local.z)
+	xr_camera.position = Vector3(_sim_cam_offset_local.x, 1.18, _sim_cam_offset_local.z)
 	xr_camera.rotation_degrees = Vector3(_sim_cam_pitch_deg, _sim_cam_yaw_deg, 0.0)
 
 	var mouse_pos := get_viewport().get_mouse_position()
 	if Input.is_key_pressed(KEY_Q):
-		var world_p := xr_camera.project_position(mouse_pos, _sim_left_depth_m)
-		left_controller.global_position = world_p
+		left_controller.global_position = xr_camera.project_position(mouse_pos, _sim_left_depth_m)
 	if Input.is_key_pressed(KEY_E):
-		var world_p := xr_camera.project_position(mouse_pos, _sim_right_depth_m)
-		right_controller.global_position = world_p
+		right_controller.global_position = xr_camera.project_position(mouse_pos, _sim_right_depth_m)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not Platform.is_xr_active and event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
@@ -636,58 +640,22 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.keycode:
-			KEY_MINUS:
-				GameFlow.adjust_hud_distance(-0.15)
-				world_ui._rebuild_all_panels(calibration_ctrl)
-			KEY_EQUAL:
-				GameFlow.adjust_hud_distance(0.15)
-				world_ui._rebuild_all_panels(calibration_ctrl)
 			KEY_H:
 				_sim_cam_yaw_deg = 0.0
 				_sim_cam_pitch_deg = 0.0
 				_sim_cam_offset_local = Vector3.ZERO
 				_sim_wrist_roll_deg = 0.0
-				xr_camera.position = Vector3(0.0, 1.20, 0.0)
+				xr_camera.position = Vector3(0.0, 1.18, 0.0)
 				xr_camera.rotation_degrees = Vector3.ZERO
-			KEY_SPACE:
-				if GameFlow.current_state == ZenoEnums.AppState.MAIN_MENU:
-					GameFlow.open_routine_picker_from_menu()
-				elif GameFlow.current_state == ZenoEnums.AppState.ROUTINE_PICKER:
-					GameFlow.select_routine_and_start(world_ui._picker_routine, world_ui._picker_duration_min, world_ui._picker_warmup)
-				elif GameFlow.current_state == ZenoEnums.AppState.WARM_UP:
-					GameFlow.skip_warmup()
-				elif GameFlow.current_state == ZenoEnums.AppState.CALIBRATION:
-					_confirm_calibration_step()
-				elif GameFlow.current_state == ZenoEnums.AppState.PAUSED:
-					GameFlow.request_resume_with_countdown()
-				elif GameFlow.current_state == ZenoEnums.AppState.RESULTS:
-					GameFlow.begin_session()
 			KEY_TAB:
 				_trigger_auto_action()
-			KEY_K:
-				if GameFlow.current_state == ZenoEnums.AppState.CALIBRATION:
-					_skip_calibration_step()
-				elif GameFlow.current_state == ZenoEnums.AppState.PAUSED and GameFlow.current_pause_reason == ZenoEnums.PauseReason.STABLE_CHAIR_CONFIRMATION:
-					GameFlow.decline_stable_chair_and_substitute()
-			KEY_O:
-				if GameFlow.current_state == ZenoEnums.AppState.CALIBRATION:
-					_mark_calibration_obstacle()
-			KEY_C:
-				if GameFlow.current_state == ZenoEnums.AppState.MAIN_MENU:
-					GameFlow.request_recalibrate()
-			KEY_L:
-				var lap_godot := GameFlow.body_frame.to_godot_world(GameFlow.profile.lap_point_from_chest_m)
-				left_controller.global_position = lap_godot
-				right_controller.global_position = lap_godot
-			KEY_R:
-				Platform.simulate_recenter()
-			KEY_M:
-				mascot_coach.trigger_poke_reaction(ZenoEnums.Hand.RIGHT)
 			KEY_N:
 				if GameFlow.current_state == ZenoEnums.AppState.ROUND_INTRO or GameFlow.current_state == ZenoEnums.AppState.ROUND_PLAY:
 					GameFlow.round_timer_s = 0.01
+			KEY_R:
+				Platform.simulate_recenter()
 			KEY_ESCAPE:
 				if GameFlow.current_state == ZenoEnums.AppState.ROUND_INTRO or GameFlow.current_state == ZenoEnums.AppState.ROUND_PLAY or GameFlow.current_state == ZenoEnums.AppState.ROUND_OUTRO:
-					GameFlow.pause_session(ZenoEnums.PauseReason.MANUAL, "Manual Pause (Esc)")
-				elif GameFlow.current_state == ZenoEnums.AppState.PAUSED or GameFlow.current_state == ZenoEnums.AppState.RESULTS or GameFlow.current_state == ZenoEnums.AppState.CALIBRATION or GameFlow.current_state == ZenoEnums.AppState.ROUTINE_PICKER or GameFlow.current_state == ZenoEnums.AppState.CREDITS or GameFlow.current_state == ZenoEnums.AppState.WARM_UP:
+					GameFlow.pause_session(ZenoEnums.PauseReason.MANUAL, "Session paused")
+				elif GameFlow.current_state != ZenoEnums.AppState.WELCOME and GameFlow.current_state != ZenoEnums.AppState.MAIN_MENU:
 					GameFlow.return_to_main_menu()

@@ -1,9 +1,8 @@
 class_name SaveServiceClass
 extends Node
 
-## Local JSON persistence for calibration profile, session history, and settings
-## (01-body-frame-and-calibration.md §4.6, 13-scoring-and-score-attack.md §7.4, AT-15).
-## Uses user:// by default, with automatic fallback to /tmp/zenofit_userdata/ in headless CI/sandbox environments.
+## Local JSON persistence for comfort calibration profile, session history, personal bests, and settings.
+## Uses user:// by default, falling back to /tmp/zenofit_userdata/ in headless sandbox runs.
 
 var base_dir: String = "user://"
 
@@ -58,7 +57,7 @@ func try_load_calibration_profile() -> Dictionary:
 		return {"loaded": true, "profile": ComfortProfile.from_dict(parsed)}
 	return {"loaded": false, "profile": ComfortProfile.create_default()}
 
-func append_session_record(record: Dictionary, max_history: int = 10) -> bool:
+func append_session_record(record: Dictionary, max_history: int = 30) -> bool:
 	var sessions := load_recent_sessions(max_history * 2)
 	sessions.push_front(record)
 	while sessions.size() > max_history:
@@ -71,7 +70,7 @@ func append_session_record(record: Dictionary, max_history: int = 10) -> bool:
 	f.close()
 	return true
 
-func load_recent_sessions(limit: int = 10) -> Array:
+func load_recent_sessions(limit: int = 20) -> Array:
 	var path := get_sessions_path()
 	if not FileAccess.file_exists(path):
 		return []
@@ -87,6 +86,20 @@ func load_recent_sessions(limit: int = 10) -> Array:
 		return arr
 	return []
 
+func get_weekly_stats() -> Dictionary:
+	var sessions := load_recent_sessions(30)
+	var pb := load_personal_best()
+	var total_sec := 0.0
+	for s in sessions:
+		if typeof(s) == TYPE_DICTIONARY:
+			total_sec += float(s.get("durationSeconds", 0.0))
+	return {
+		"sessions_count": sessions.size(),
+		"total_minutes": int(round(total_sec / 60.0)),
+		"best_score": int(pb.get("overall_best_score", 0)),
+		"best_rank": String(pb.get("overall_best_rank", "C"))
+	}
+
 func save_settings(settings_dict: Dictionary) -> bool:
 	var path := get_settings_path()
 	var f := FileAccess.open(path, FileAccess.WRITE)
@@ -100,17 +113,13 @@ func load_settings() -> Dictionary:
 	var defaults := {
 		"difficulty": ZenoEnums.DifficultyTier.STANDARD,
 		"hand_mode": ZenoEnums.HandMode.BOTH_HANDS,
-		"no_trunk_mode": false,
-		"quick_session_one_round": false,
+		"input_mode": ZenoEnums.InputMode.CONTROLLER,
 		"haptics_enabled": true,
 		"haptic_intensity": 1.0,
 		"audio_volume": 0.8,
 		"rest_reminder_minutes": 8.0,
-		"chair_is_swivel": false,
-		"preferred_duration_min": 6,
-		"enable_warmup": false,
-		"hud_distance_m": 1.35,
-		"mascot_high_quality": true
+		"hud_distance_m": 1.65,
+		"hud_scale": 1.0
 	}
 	var path := get_settings_path()
 	if not FileAccess.file_exists(path):
@@ -122,7 +131,8 @@ func load_settings() -> Dictionary:
 	f.close()
 	if typeof(parsed) == TYPE_DICTIONARY:
 		for k in parsed.keys():
-			defaults[k] = parsed[k]
+			if defaults.has(k):
+				defaults[k] = parsed[k]
 	return defaults
 
 func load_personal_best() -> Dictionary:
@@ -142,21 +152,19 @@ func load_personal_best() -> Dictionary:
 	return {"overall_best_score": 0, "overall_best_rank": "C", "records": {}}
 
 func update_personal_best(
-	routine_id: int,
-	duration_min: int,
+	key_id: String,
 	score: int,
 	accuracy_percent: float,
 	rank: String
 ) -> Dictionary:
 	var pb := load_personal_best()
 	var records: Dictionary = pb.get("records", {})
-	var key := "%d_%d" % [routine_id, duration_min]
-	var prev_entry: Dictionary = records.get(key, {})
+	var prev_entry: Dictionary = records.get(key_id, {})
 	var prev_best := int(prev_entry.get("best_score", 0))
 	var is_new_best := score > prev_best
 	var new_best := maxi(prev_best, score)
-	if is_new_best or not records.has(key):
-		records[key] = {
+	if is_new_best or not records.has(key_id):
+		records[key_id] = {
 			"best_score": new_best,
 			"best_rank": rank if is_new_best else String(prev_entry.get("best_rank", rank)),
 			"best_accuracy": maxf(accuracy_percent, float(prev_entry.get("best_accuracy", 0.0)))
@@ -175,7 +183,7 @@ func update_personal_best(
 		"is_new_best": is_new_best,
 		"previous_best": prev_best,
 		"new_best": new_best,
-		"best_rank": String(records[key].get("best_rank", rank))
+		"best_rank": String(records[key_id].get("best_rank", rank))
 	}
 
 func delete_all_saved_data() -> void:

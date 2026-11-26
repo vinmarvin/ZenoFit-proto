@@ -1,8 +1,0 @@
-Environment:
-- https://skfb.ly/ounpS (https://sketchfab.com/jrevel) -> Attribute
-- https://skfb.ly/on8PZ (https://sketchfab.com/prof.alessandrolima) -> Attribute
-- https://skfb.ly/ooxrx (https://sketchfab.com/leomachado92) -> Attribute
-
-Asset in Game (Non Mascot):
-- Wood Plank:  
-- 
