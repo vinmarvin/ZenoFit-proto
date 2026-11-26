@@ -43,6 +43,7 @@ func run_all(host_root: Node = null) -> Dictionary:
 	test_ex06_torso_twist()
 	test_ex07_horizon_gaze()
 	test_live_instantiation_all_seven_exercises()
+	test_new_upper_body_exercises_and_mechanical_tension()
 	test_scoring_tempo_and_session_draw()
 	test_calibration_and_persistence()
 	test_ui_flow_hud_ergonomics_and_no_debug_strings(host_root)
@@ -255,6 +256,88 @@ func test_live_instantiation_all_seven_exercises() -> void:
 		if arena.get_child_count() < 0:
 			ok = false
 	_assert_true("LIVE-EXERCISES", ok and instances.size() == 7, "All 7 curated exercises instantiate, tick, auto-act, and clean up cleanly")
+	arena.free()
+
+func test_new_upper_body_exercises_and_mechanical_tension() -> void:
+	var all_ids := SessionDraw.get_all_exercises()
+	_assert_true(
+		"NEW-EX-LIST",
+		all_ids.size() == 11 \
+			and all_ids.has(ZenoEnums.ExerciseId.SHOULDER_PRESS) \
+			and all_ids.has(ZenoEnums.ExerciseId.BICEP_CURL) \
+			and all_ids.has(ZenoEnums.ExerciseId.ARM_CIRCLES) \
+			and all_ids.has(ZenoEnums.ExerciseId.LATERAL_RAISE),
+		"All 4 new upper-body exercises appear in SessionDraw (11 total)"
+	)
+
+	# Dumbbell note must appear ONLY on Shoulder Press, Bicep Curl, and Arm Circles
+	var expected_msg := "Ingin mendapatkan latihan yang lebih optimal? Kamu bisa menggunakan sepasang dumbbell untuk menambahkan resistensi selama latihan. Tidak punya dumbbell? Tidak masalah! Kamu tetap bisa melakukan exercise ini hanya dengan menggunakan tangan."
+	_assert_true("DUMBBELL-NOTE", ZenoEnums.get_exercise_dumbbell_note(ZenoEnums.ExerciseId.SHOULDER_PRESS) == expected_msg, "Shoulder Press has exact dumbbell note")
+	_assert_true("DUMBBELL-NOTE", ZenoEnums.get_exercise_dumbbell_note(ZenoEnums.ExerciseId.BICEP_CURL) == expected_msg, "Bicep Curl has exact dumbbell note")
+	_assert_true("DUMBBELL-NOTE", ZenoEnums.get_exercise_dumbbell_note(ZenoEnums.ExerciseId.ARM_CIRCLES) == expected_msg, "Arm Circles has exact dumbbell note")
+	_assert_true("DUMBBELL-NOTE", ZenoEnums.get_exercise_dumbbell_note(ZenoEnums.ExerciseId.LATERAL_RAISE) == "", "Lateral Raise does NOT show dumbbell note")
+	_assert_true("DUMBBELL-NOTE", ZenoEnums.get_exercise_dumbbell_note(ZenoEnums.ExerciseId.BOARD_SMASH) == "", "Existing exercises do NOT show dumbbell note")
+
+	# Mechanical Tension Guide proximity evaluation (polyline & circle)
+	var arena := Node3D.new()
+	var bf := BodyFrame.new()
+	var guide := MechanicalTensionGuide.new()
+	guide.setup_polyline(arena, bf, [Vector3(0.0, 0.0, 0.30), Vector3(0.0, 0.35, 0.30)], 0.12)
+	var eval_in := guide.evaluate_hand(Vector3(0.04, 0.18, 0.30), 0.12)
+	var eval_out := guide.evaluate_hand(Vector3(0.28, 0.18, 0.30), 0.12)
+	_assert_true("TENSION-POLY", bool(eval_in["in_zone"]) and not bool(eval_out["in_zone"]), "Polyline tension guide accepts in-zone and rejects out-of-zone hand")
+	guide.retire()
+
+	guide.setup_circle(arena, bf, Vector3(0.20, 0.08, 0.36), 0.16, 0.12)
+	var c_in := guide.evaluate_hand(Vector3(0.36, 0.08, 0.36), 0.12)
+	var c_out := guide.evaluate_hand(Vector3(0.20, 0.08, 0.36), 0.12)
+	_assert_true("TENSION-CIRCLE", bool(c_in["in_zone"]) and not bool(c_out["in_zone"]), "Circle tension guide accepts ring perimeter and rejects center")
+	guide.retire()
+
+	guide.setup_circle(arena, bf, Vector3(0.42, 0.08, 0.12), 0.16, 0.12, "yz")
+	var yz_in := guide.evaluate_hand(Vector3(0.42, 0.24, 0.12), 0.12)
+	var yz_out := guide.evaluate_hand(Vector3(0.10, 0.24, 0.12), 0.12)
+	_assert_true("TENSION-CIRCLE-YZ", bool(yz_in["in_zone"]) and not bool(yz_out["in_zone"]), "Side-plane (Y-Z) Arm Circles tension guide accepts side ring and rejects front drift")
+	guide.retire()
+
+	guide.setup_polyline(arena, bf, [Vector3(0.0, 0.0, 0.30), Vector3(0.0, 0.35, 0.30)], 0.12)
+	guide.update_visual_feedback(0.5, true, false, true, true)
+	var lbl_up := guide.get_tempo_phase_label()
+	guide.update_visual_feedback(0.7, true, false, true, true)
+	var lbl_hold := guide.get_tempo_phase_label()
+	guide.update_visual_feedback(0.8, true, false, true, true)
+	var lbl_down := guide.get_tempo_phase_label()
+	_assert_true("TENSION-TEMPO", lbl_up == "Lift (1s)" and lbl_hold == "Contract!" and lbl_down == "Lower slowly (2s)", "Unified tension guide cycles 1s up -> contraction -> 2s down")
+	guide.retire()
+
+	# Two-set progression across all 4 new exercises
+	var prof := ComfortProfile.create_default()
+	var preset := DifficultyPreset.create_for_tier(ZenoEnums.DifficultyTier.STANDARD)
+	var new_mechs: Array[TwoSetTensionMechanic] = [
+		ShoulderPressMechanic.new(),
+		BicepCurlMechanic.new(),
+		ArmCirclesMechanic.new(),
+		LateralRaiseMechanic.new()
+	]
+	var new_ids: Array[int] = [
+		ZenoEnums.ExerciseId.SHOULDER_PRESS,
+		ZenoEnums.ExerciseId.BICEP_CURL,
+		ZenoEnums.ExerciseId.ARM_CIRCLES,
+		ZenoEnums.ExerciseId.LATERAL_RAISE
+	]
+	for i in range(new_mechs.size()):
+		var m := new_mechs[i]
+		m.setup(new_ids[i], prof, bf, preset, ZenoEnums.HandMode.BOTH_HANDS, arena)
+		_assert_true("TWO-SET", m.current_set == 1 and not m.is_exercise_completed(), "%s starts at Set 1 and is not complete" % ZenoEnums.get_exercise_title(new_ids[i]))
+		for _r in range(TwoSetTensionMechanic.REPS_PER_SET):
+			m.simulate_auto_action()
+		_assert_true("TWO-SET", m._in_set_transition and not m.is_exercise_completed(), "%s enters Set 1->2 transition and is not prematurely complete" % ZenoEnums.get_exercise_title(new_ids[i]))
+		m.simulate_auto_action() # Complete transition into Set 2
+		_assert_true("TWO-SET", m.current_set == 2 and not m.is_exercise_completed(), "%s advances to Set 2" % ZenoEnums.get_exercise_title(new_ids[i]))
+		for _r2 in range(TwoSetTensionMechanic.REPS_PER_SET):
+			m.simulate_auto_action()
+		_assert_true("TWO-SET", m.is_exercise_completed(), "%s completes only after Set 2 finishes" % ZenoEnums.get_exercise_title(new_ids[i]))
+		m.clear_arena()
 	arena.free()
 
 func test_scoring_tempo_and_session_draw() -> void:

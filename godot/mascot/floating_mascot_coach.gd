@@ -319,3 +319,20 @@ func _animate_joints() -> void:
 			_visual_root.rotation.y = deg_to_rad(sin(t * 1.9) * 36.0)
 		ZenoEnums.ExerciseId.HORIZON_GAZE:
 			_neck_pivot.rotation.y = deg_to_rad(sin(t * 1.3) * 44.0)
+		ZenoEnums.ExerciseId.SHOULDER_PRESS:
+			var press_u := 0.5 + 0.5 * sin(t * 2.4)
+			_left_shoulder_pivot.rotation.x = deg_to_rad(lerpf(-55.0, -140.0, press_u))
+			_right_shoulder_pivot.rotation.x = deg_to_rad(lerpf(-55.0, -140.0, press_u))
+		ZenoEnums.ExerciseId.BICEP_CURL:
+			var curl_u := 0.5 + 0.5 * sin(t * 2.6)
+			_left_shoulder_pivot.rotation.x = deg_to_rad(lerpf(-15.0, -82.0, curl_u))
+			_right_shoulder_pivot.rotation.x = deg_to_rad(lerpf(-15.0, -82.0, curl_u))
+		ZenoEnums.ExerciseId.ARM_CIRCLES:
+			_left_shoulder_pivot.rotation.z = deg_to_rad(-82.0 + sin(t * 3.6) * 20.0)
+			_left_shoulder_pivot.rotation.y = deg_to_rad(cos(t * 3.6) * 22.0)
+			_right_shoulder_pivot.rotation.z = deg_to_rad(82.0 - sin(t * 3.6) * 20.0)
+			_right_shoulder_pivot.rotation.y = deg_to_rad(-cos(t * 3.6) * 22.0)
+		ZenoEnums.ExerciseId.LATERAL_RAISE:
+			var lat_u := 0.5 + 0.5 * sin(t * 2.2)
+			_left_shoulder_pivot.rotation.z = deg_to_rad(lerpf(-12.0, -85.0, lat_u))
+			_right_shoulder_pivot.rotation.z = deg_to_rad(lerpf(12.0, 85.0, lat_u))

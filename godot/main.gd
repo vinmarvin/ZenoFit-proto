@@ -45,6 +45,7 @@ var _left_speeds: Array[float] = [0.0, 0.0, 0.0]
 var _right_speeds: Array[float] = [0.0, 0.0, 0.0]
 var _prev_head_yaw_deg: float = 0.0
 var _input_lost_timer_s: float = 0.0
+var _hand_trail_timer_s: float = 0.0
 
 # Desktop simulator state
 var _sim_left_depth_m: float = 0.45
@@ -286,6 +287,9 @@ func _process(delta: float) -> void:
 				_left_roll_deg,
 				_right_roll_deg
 			)
+			if active_mechanic.has_two_set_completion() and active_mechanic.is_exercise_completed():
+				GameFlow.complete_active_round()
+			_update_hand_motion_trails(delta)
 
 	mascot_coach.update_coach(
 		delta,
@@ -437,6 +441,43 @@ func _on_target_hit_feedback(_hand: int, _points: int, streak: int, _is_solid: b
 func _on_target_missed_feedback() -> void:
 	Platform.play_sfx("miss", 0)
 
+func _update_hand_motion_trails(dt: float) -> void:
+	if arena_root == null or not is_inside_tree():
+		return
+	_hand_trail_timer_s += dt
+	if _hand_trail_timer_s < 0.045:
+		return
+	_hand_trail_timer_s = 0.0
+	if _left_tracked and _get_smoothed_speed(_left_speeds) >= 0.35:
+		_spawn_hand_trail_dot(_left_world_pos, Color(0.32, 0.88, 0.78))
+	if _right_tracked and _get_smoothed_speed(_right_speeds) >= 0.35:
+		_spawn_hand_trail_dot(_right_world_pos, Color(0.96, 0.72, 0.32))
+
+func _spawn_hand_trail_dot(world_pos: Vector3, col: Color) -> void:
+	var mi := MeshInstance3D.new()
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.012
+	sphere.height = 0.024
+	sphere.radial_segments = 8
+	sphere.rings = 6
+	mi.mesh = sphere
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(col.r, col.g, col.b, 0.48)
+	mat.emission_enabled = true
+	mat.emission = col
+	mat.emission_energy_multiplier = 0.45
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mi.material_override = mat
+	arena_root.add_child(mi)
+	mi.global_position = world_pos
+
+	var tw := mi.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(mi, "scale", Vector3.ONE * 0.12, 0.24).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(mat, "albedo_color:a", 0.0, 0.24)
+	tw.chain().tween_callback(mi.queue_free)
+
 func _spawn_hit_burst_vfx(world_pos: Vector3, points: int, streak: int, is_solid: bool) -> void:
 	if arena_root == null or not is_inside_tree():
 		return
@@ -497,6 +538,7 @@ func _on_round_started(_round_idx: int, exercise_id: int) -> void:
 		int(GameFlow.settings.get("hand_mode", ZenoEnums.HandMode.BOTH_HANDS)),
 		arena_root
 	)
+	GameFlow.require_explicit_round_completion = active_mechanic.has_two_set_completion()
 	Platform.play_sfx("chime", 0)
 
 func _instantiate_exercise(exercise_id: int) -> MechanicBase:
@@ -508,6 +550,10 @@ func _instantiate_exercise(exercise_id: int) -> MechanicBase:
 		ZenoEnums.ExerciseId.WRIST_TWIST: return WristTwistMechanic.new()
 		ZenoEnums.ExerciseId.TORSO_TWIST: return TorsoTwistMechanic.new()
 		ZenoEnums.ExerciseId.HORIZON_GAZE: return HorizonGazeMechanic.new()
+		ZenoEnums.ExerciseId.SHOULDER_PRESS: return ShoulderPressMechanic.new()
+		ZenoEnums.ExerciseId.BICEP_CURL: return BicepCurlMechanic.new()
+		ZenoEnums.ExerciseId.ARM_CIRCLES: return ArmCirclesMechanic.new()
+		ZenoEnums.ExerciseId.LATERAL_RAISE: return LateralRaiseMechanic.new()
 		_: return BoardSmashMechanic.new()
 
 func _on_xr_button_pressed(action_name: String, hand: int) -> void:

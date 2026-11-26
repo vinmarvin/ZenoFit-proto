@@ -27,7 +27,11 @@ enum ExerciseId {
 	ORBIT_FLOW = 4,
 	WRIST_TWIST = 5,
 	TORSO_TWIST = 6,
-	HORIZON_GAZE = 7
+	HORIZON_GAZE = 7,
+	SHOULDER_PRESS = 8,
+	BICEP_CURL = 9,
+	ARM_CIRCLES = 10,
+	LATERAL_RAISE = 11
 }
 
 enum ExerciseCategory {
@@ -97,6 +101,10 @@ static func get_exercise_title(id: int) -> String:
 		ExerciseId.WRIST_TWIST: return "Wrist Twist"
 		ExerciseId.TORSO_TWIST: return "Torso Twist"
 		ExerciseId.HORIZON_GAZE: return "Horizon Gaze"
+		ExerciseId.SHOULDER_PRESS: return "Shoulder Press"
+		ExerciseId.BICEP_CURL: return "Bicep Curl"
+		ExerciseId.ARM_CIRCLES: return "Arm Circles"
+		ExerciseId.LATERAL_RAISE: return "Lateral Raise"
 		_: return "Seated Flow"
 
 static func get_exercise_tagline(id: int) -> String:
@@ -108,6 +116,10 @@ static func get_exercise_tagline(id: int) -> String:
 		ExerciseId.WRIST_TWIST: return "Gentle wrist rotation anti-RSI"
 		ExerciseId.TORSO_TWIST: return "Rotate upper torso left and right"
 		ExerciseId.HORIZON_GAZE: return "Slow neck turns across horizon"
+		ExerciseId.SHOULDER_PRESS: return "Press both hands overhead and lower with control"
+		ExerciseId.BICEP_CURL: return "Curl both arms toward shoulders and extend smoothly"
+		ExerciseId.ARM_CIRCLES: return "Circle both arms clockwise then counterclockwise"
+		ExerciseId.LATERAL_RAISE: return "Raise both arms to shoulder height and lower"
 		_: return "Comfortable seated movement"
 
 static func get_exercise_area(id: int) -> String:
@@ -119,6 +131,10 @@ static func get_exercise_area(id: int) -> String:
 		ExerciseId.WRIST_TWIST: return "Wrists & Forearms"
 		ExerciseId.TORSO_TWIST: return "Core & Spine"
 		ExerciseId.HORIZON_GAZE: return "Neck"
+		ExerciseId.SHOULDER_PRESS: return "Shoulders & Triceps"
+		ExerciseId.BICEP_CURL: return "Biceps"
+		ExerciseId.ARM_CIRCLES: return "Shoulders"
+		ExerciseId.LATERAL_RAISE: return "Lateral Deltoid"
 		_: return "Upper Body"
 
 static func get_exercise_cue(id: int) -> String:
@@ -130,6 +146,10 @@ static func get_exercise_cue(id: int) -> String:
 		ExerciseId.WRIST_TWIST: return "Keep forearms steady and rotate wrists"
 		ExerciseId.TORSO_TWIST: return "Hold hands near chest and turn your torso"
 		ExerciseId.HORIZON_GAZE: return "Turn your head slowly to each lantern"
+		ExerciseId.SHOULDER_PRESS: return "Follow the vertical tension line up and down"
+		ExerciseId.BICEP_CURL: return "Curl along the tension arc with steady elbows"
+		ExerciseId.ARM_CIRCLES: return "Trace the circular tension ring in each set direction"
+		ExerciseId.LATERAL_RAISE: return "Lift and lower both arms along the lateral tension arc"
 		_: return "Move comfortably within your reach"
 
 static func get_exercise_preview_steps(id: int) -> Array[String]:
@@ -176,6 +196,30 @@ static func get_exercise_preview_steps(id: int) -> Array[String]:
 				"Turn your head slowly toward each glowing lantern",
 				"Pause steadily for one second before turning back"
 			]
+		ExerciseId.SHOULDER_PRESS:
+			return [
+				"Set 1: Lift both hands upward along the vertical tension line",
+				"Set 2: Lower both hands back to shoulder height with control",
+				"Stay inside the glowing tension corridor to hit every target"
+			]
+		ExerciseId.BICEP_CURL:
+			return [
+				"Set 1: Bend both elbows to curl hands up toward your shoulders",
+				"Set 2: Extend both elbows smoothly back to the start position",
+				"Keep your hands following the curved tension arc"
+			]
+		ExerciseId.ARM_CIRCLES:
+			return [
+				"Set 1: Circle both arms clockwise along the glowing ring",
+				"Set 2: Circle both arms counterclockwise with steady form",
+				"Stay on the circular tension path to hit each checkpoint"
+			]
+		ExerciseId.LATERAL_RAISE:
+			return [
+				"Set 1: Raise both arms out to the sides up to shoulder height",
+				"Set 2: Lower both arms smoothly back down along the arc",
+				"Follow the lateral tension path for balanced form"
+			]
 		_:
 			return [
 				"Sit comfortably upright in your chair",
@@ -183,11 +227,18 @@ static func get_exercise_preview_steps(id: int) -> Array[String]:
 				"Stop anytime if you feel discomfort"
 			]
 
+static func get_exercise_dumbbell_note(id: int) -> String:
+	match id:
+		ExerciseId.SHOULDER_PRESS, ExerciseId.BICEP_CURL, ExerciseId.ARM_CIRCLES:
+			return "Ingin mendapatkan latihan yang lebih optimal? Kamu bisa menggunakan sepasang dumbbell untuk menambahkan resistensi selama latihan. Tidak punya dumbbell? Tidak masalah! Kamu tetap bisa melakukan exercise ini hanya dengan menggunakan tangan."
+		_:
+			return ""
+
 static func get_exercise_category(id: int) -> int:
 	match id:
-		ExerciseId.BOARD_SMASH, ExerciseId.WIDE_SPLIT:
+		ExerciseId.BOARD_SMASH, ExerciseId.WIDE_SPLIT, ExerciseId.SHOULDER_PRESS, ExerciseId.BICEP_CURL, ExerciseId.LATERAL_RAISE:
 			return ExerciseCategory.ACTIVE
-		ExerciseId.SKY_REACH, ExerciseId.ORBIT_FLOW, ExerciseId.WRIST_TWIST:
+		ExerciseId.SKY_REACH, ExerciseId.ORBIT_FLOW, ExerciseId.WRIST_TWIST, ExerciseId.ARM_CIRCLES:
 			return ExerciseCategory.MOBILITY
 		ExerciseId.TORSO_TWIST, ExerciseId.HORIZON_GAZE:
 			return ExerciseCategory.POSTURE

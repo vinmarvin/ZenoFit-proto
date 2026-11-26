@@ -12,7 +12,11 @@ static func get_all_exercises() -> Array[int]:
 		ZenoEnums.ExerciseId.ORBIT_FLOW,
 		ZenoEnums.ExerciseId.WRIST_TWIST,
 		ZenoEnums.ExerciseId.TORSO_TWIST,
-		ZenoEnums.ExerciseId.HORIZON_GAZE
+		ZenoEnums.ExerciseId.HORIZON_GAZE,
+		ZenoEnums.ExerciseId.SHOULDER_PRESS,
+		ZenoEnums.ExerciseId.BICEP_CURL,
+		ZenoEnums.ExerciseId.ARM_CIRCLES,
+		ZenoEnums.ExerciseId.LATERAL_RAISE
 	]
 
 static func get_exercises_by_category(category: int) -> Array[int]:

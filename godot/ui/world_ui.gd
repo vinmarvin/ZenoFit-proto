@@ -347,7 +347,7 @@ func _build_main_panel(state: int, cal_ctrl: CalibrationController) -> void:
 			grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 			grid.add_theme_constant_override("h_separation", 12)
 			grid.add_theme_constant_override("v_separation", 12)
-			var lib_btn := _btn_secondary("Exercise Library\n7 seated movements", func(): gf.open_exercise_select(ZenoEnums.ExerciseCategory.ALL), false, 18, 92.0)
+			var lib_btn := _btn_secondary("Exercise Library\n%d seated movements" % SessionDraw.get_all_exercises().size(), func(): gf.open_exercise_select(ZenoEnums.ExerciseCategory.ALL), false, 18, 92.0)
 			var tut_btn := _btn_secondary("Tutorial\nLearn the controls", func(): gf.open_tutorial(), false, 18, 92.0)
 			var set_btn := _btn_secondary("Settings\nComfort & display", func(): gf.open_settings(ZenoEnums.AppState.MAIN_MENU), false, 18, 92.0)
 			var ext_btn := _btn_destructive("Exit Experience\nLeave session", func(): gf.request_exit_confirm(), 18, 92.0)
@@ -371,24 +371,25 @@ func _build_main_panel(state: int, cal_ctrl: CalibrationController) -> void:
 			box.add_child(tabs)
 
 			var list := SessionDraw.get_exercises_by_category(gf.filter_category)
+			var is_compact := list.size() > 8
 			var grid := GridContainer.new()
 			grid.columns = 4 if list.size() >= 4 else maxi(1, list.size())
 			grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
-			grid.add_theme_constant_override("h_separation", 12)
-			grid.add_theme_constant_override("v_separation", 12)
+			grid.add_theme_constant_override("h_separation", 10 if is_compact else 12)
+			grid.add_theme_constant_override("v_separation", 8 if is_compact else 12)
 			for ex_id in list:
-				var card := DojoPanel3D.make_card_panel(DojoPanel3D.COL_CARD_BG, DojoPanel3D.COL_CARD_BORDER, 14, 12)
+				var card := DojoPanel3D.make_card_panel(DojoPanel3D.COL_CARD_BG, DojoPanel3D.COL_CARD_BORDER, 12 if is_compact else 14, 8 if is_compact else 12)
 				card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 				card.size_flags_vertical = Control.SIZE_EXPAND_FILL
 				var cvb := VBoxContainer.new()
-				cvb.add_theme_constant_override("separation", 6)
+				cvb.add_theme_constant_override("separation", 3 if is_compact else 6)
 				card.add_child(cvb)
 				cvb.add_child(DojoPanel3D.make_pill_badge(ZenoEnums.get_exercise_area(ex_id)))
-				cvb.add_child(DojoPanel3D.make_label(ZenoEnums.get_exercise_title(ex_id), 21, DojoPanel3D.COL_TEXT_MAIN))
-				var tag_lbl := DojoPanel3D.make_label(ZenoEnums.get_exercise_tagline(ex_id), 14, DojoPanel3D.COL_TEXT_MUTED)
+				cvb.add_child(DojoPanel3D.make_label(ZenoEnums.get_exercise_title(ex_id), 18 if is_compact else 21, DojoPanel3D.COL_TEXT_MAIN))
+				var tag_lbl := DojoPanel3D.make_label(ZenoEnums.get_exercise_tagline(ex_id), 12 if is_compact else 14, DojoPanel3D.COL_TEXT_MUTED)
 				tag_lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
 				cvb.add_child(tag_lbl)
-				cvb.add_child(_btn_primary("Preview", func(): gf.open_exercise_preview(ex_id), 16, 40.0))
+				cvb.add_child(_btn_primary("Preview", func(): gf.open_exercise_preview(ex_id), 14 if is_compact else 16, 32.0 if is_compact else 40.0))
 				grid.add_child(card)
 			box.add_child(grid)
 
@@ -429,6 +430,12 @@ func _build_main_panel(state: int, cal_ctrl: CalibrationController) -> void:
 			meta_row.add_child(DojoPanel3D.make_metric_tile("DURATION", "45 sec", ZenoEnums.get_input_mode_name(input_mode)))
 			meta_row.add_child(DojoPanel3D.make_metric_tile("COMFORT", gf.get_current_preset().preset_name, "Reach %.0f%%" % (gf.get_current_preset().reach_factor_k * 100.0)))
 			right_col.add_child(meta_row)
+
+			var dumbbell_note := ZenoEnums.get_exercise_dumbbell_note(ex)
+			if not dumbbell_note.is_empty():
+				var note_card := DojoPanel3D.make_card_panel(Color(0.14, 0.22, 0.18, 0.85), DojoPanel3D.COL_ACCENT_TEAL, 12, 10)
+				note_card.add_child(DojoPanel3D.make_label(dumbbell_note, 13, DojoPanel3D.COL_TEXT_MAIN))
+				right_col.add_child(note_card)
 
 			var sp_r := Control.new()
 			sp_r.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -895,7 +902,13 @@ func update_ui_display(
 			if _live_title_lbl != null:
 				_live_title_lbl.text = ZenoEnums.get_exercise_title(ex)
 			if _live_sub_lbl != null:
-				_live_sub_lbl.text = "Round %d of %d  •  %s" % [gf.current_round_index + 1, gf.session_lineup.size(), ZenoEnums.get_exercise_area(ex)] if gf.is_quick_break_mode else ZenoEnums.get_exercise_area(ex)
+				var set_txt := ""
+				if active_mechanic != null and active_mechanic.has_two_set_completion():
+					set_txt = active_mechanic.get_set_display_text()
+				if not set_txt.is_empty():
+					_live_sub_lbl.text = ("Round %d of %d  •  %s" % [gf.current_round_index + 1, gf.session_lineup.size(), set_txt]) if gf.is_quick_break_mode else set_txt
+				else:
+					_live_sub_lbl.text = "Round %d of %d  •  %s" % [gf.current_round_index + 1, gf.session_lineup.size(), ZenoEnums.get_exercise_area(ex)] if gf.is_quick_break_mode else ZenoEnums.get_exercise_area(ex)
 			if _live_score_lbl != null:
 				var streak_str := "  (x%d)" % gf.round_tracker.streak if gf.round_tracker.streak >= 2 else ""
 				_live_score_lbl.text = "SCORE  %d%s" % [gf.round_tracker.combo_total_score, streak_str]

@@ -46,6 +46,7 @@ var current_round_index: int = 0
 var round_timer_s: float = 0.0
 var session_elapsed_s: float = 0.0
 var calibration_return_state: int = ZenoEnums.AppState.MAIN_MENU
+var require_explicit_round_completion: bool = false
 
 # Resume countdown
 var is_resume_counting_down: bool = false
@@ -234,6 +235,7 @@ func begin_session() -> void:
 	_enter_round_intro(0)
 
 func _enter_round_intro(round_idx: int) -> void:
+	require_explicit_round_completion = false
 	current_round_index = round_idx
 	round_timer_s = ROUND_INTRO_SECONDS
 	var ex := get_current_exercise_id()
@@ -274,9 +276,12 @@ func advance_round_timer(dt: float) -> void:
 
 	elif current_state == ZenoEnums.AppState.ROUND_PLAY:
 		session_elapsed_s += dt
-		round_timer_s -= dt
-		if round_timer_s <= 0.0:
-			_finish_current_round()
+		if require_explicit_round_completion:
+			round_timer_s = maxf(0.0, round_timer_s - dt)
+		else:
+			round_timer_s -= dt
+			if round_timer_s <= 0.0:
+				_finish_current_round()
 
 	elif current_state == ZenoEnums.AppState.ROUND_OUTRO:
 		round_timer_s -= dt
@@ -286,7 +291,12 @@ func advance_round_timer(dt: float) -> void:
 			else:
 				finish_session_to_results()
 
+func complete_active_round() -> void:
+	if current_state == ZenoEnums.AppState.ROUND_PLAY:
+		_finish_current_round()
+
 func _finish_current_round() -> void:
+	require_explicit_round_completion = false
 	var prev_sum := 0
 	for s in round_scores:
 		prev_sum += s
@@ -360,6 +370,7 @@ func finish_session_to_results() -> void:
 	_transition_to(ZenoEnums.AppState.RESULTS)
 
 func return_to_main_menu() -> void:
+	require_explicit_round_completion = false
 	is_resume_counting_down = false
 	var plat := _get_platform()
 	if plat != null:
