@@ -1,7 +1,8 @@
 extends Node
 
 ## Platform abstraction autoload isolating OpenXR device features, Session Input Lock,
-## haptics, passthrough, recenter signaling, and procedural spatial audio SFX.
+## haptics, passthrough, recenter signaling, procedural spatial audio SFX, and the
+## looped background music (Main Menu / Workout Play / Workout Complete, see ZenoMusic).
 
 signal tracking_origin_recentered()
 
@@ -10,15 +11,31 @@ var is_xr_active: bool = false
 var passthrough_enabled: bool = false
 var haptics_enabled: bool = true
 var haptic_intensity: float = 1.0
-var audio_volume: float = 0.8
+var audio_volume: float = 0.8:
+	set(value):
+		audio_volume = clampf(value, 0.0, 1.0)
+		_refresh_music_volume()
 var last_haptic_event: Dictionary = {}
 var last_audio_event: Dictionary = {}
+var last_music_event: Dictionary = {}
+var current_music_track: String = ""
+
+## Background music sits under the SFX mix (relative gain applied on top of audio_volume).
+const MUSIC_GAIN := 0.55
+const MUSIC_FADE_S := 0.8
+const MUSIC_SILENT_DB := -80.0
+## Fades run between this floor and the target (a linear dB ramp from -80 would sound silent for half the fade).
+const MUSIC_FADE_FLOOR_DB := -40.0
+const MUSIC_SHUTDOWN_DRAIN_MS := 60
 
 var _sfx_players: Dictionary = {}
 var _sfx_bank: Dictionary = {}
+var _music_players: Dictionary = {}
+var _music_tweens: Dictionary = {}
 
 func _ready() -> void:
 	_init_procedural_audio()
+	_init_music_players()
 
 func initialize_platform() -> bool:
 	xr_interface = XRServer.find_interface("OpenXR")
@@ -263,6 +280,106 @@ func play_sfx(sfx_type: String, streak: int = 0) -> void:
 	player.volume_db = linear_to_db(clampf(audio_volume, 0.05, 1.0))
 	if is_inside_tree():
 		player.play()
+
+# ==============================================================================
+# Background Music (looped OGG tracks from res://assets/audio/, see ZenoMusic)
+# ==============================================================================
+
+func _init_music_players() -> void:
+	for track_key in ZenoMusic.TRACK_PATHS.keys():
+		var path := String(ZenoMusic.TRACK_PATHS[track_key])
+		if not ResourceLoader.exists(path):
+			push_warning("[Platform] Music track missing: %s" % path)
+			continue
+		var stream := load(path) as AudioStream
+		if stream == null:
+			continue
+		if stream is AudioStreamOggVorbis:
+			(stream as AudioStreamOggVorbis).loop = true
+		var player := AudioStreamPlayer.new()
+		player.name = "Music_%s" % track_key
+		player.stream = stream
+		player.volume_db = MUSIC_SILENT_DB
+		player.process_mode = Node.PROCESS_MODE_ALWAYS
+		add_child(player)
+		_music_players[track_key] = player
+
+func has_music_track(track: String) -> bool:
+	return _music_players.has(track)
+
+func is_music_track_looping(track: String) -> bool:
+	if not _music_players.has(track):
+		return false
+	var stream := (_music_players[track] as AudioStreamPlayer).stream
+	return stream is AudioStreamOggVorbis and (stream as AudioStreamOggVorbis).loop
+
+func _music_target_db() -> float:
+	if audio_volume <= 0.01:
+		return MUSIC_SILENT_DB
+	return linear_to_db(clampf(audio_volume * MUSIC_GAIN, 0.0001, 1.0))
+
+## Cross-fades to `track` ("" = silence). Re-requesting the active track is a no-op,
+## so the workout music keeps flowing across rounds, pause, and settings overlays.
+func play_music(track: String) -> void:
+	if track == current_music_track:
+		return
+	var prev := current_music_track
+	current_music_track = track
+	last_music_event = {"track": track, "previous": prev}
+	if _music_players.has(prev):
+		_fade_music_player(prev, MUSIC_FADE_FLOOR_DB, true)
+	if _music_players.has(track):
+		var player := _music_players[track] as AudioStreamPlayer
+		_kill_music_tween(track)
+		player.volume_db = MUSIC_FADE_FLOOR_DB
+		if player.is_inside_tree():
+			player.play(0.0)
+		_fade_music_player(track, _music_target_db(), false)
+
+func stop_music() -> void:
+	play_music("")
+
+func _fade_music_player(track: String, target_db: float, stop_after: bool) -> void:
+	var player := _music_players[track] as AudioStreamPlayer
+	_kill_music_tween(track)
+	if not is_inside_tree() or not player.is_inside_tree():
+		player.volume_db = target_db
+		if stop_after:
+			player.stop()
+		return
+	var tw := create_tween()
+	tw.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	tw.tween_property(player, "volume_db", target_db, MUSIC_FADE_S)
+	if stop_after:
+		tw.tween_callback(player.stop)
+	_music_tweens[track] = tw
+
+func _kill_music_tween(track: String) -> void:
+	if _music_tweens.has(track):
+		var tw := _music_tweens[track] as Tween
+		if tw != null and tw.is_valid():
+			tw.kill()
+		_music_tweens.erase(track)
+
+func _refresh_music_volume() -> void:
+	if not _music_players.has(current_music_track):
+		return
+	_kill_music_tween(current_music_track)
+	(_music_players[current_music_track] as AudioStreamPlayer).volume_db = _music_target_db()
+
+## Release active OGG playbacks before shutdown so AudioServer leaves no leaked streams.
+func _exit_tree() -> void:
+	var had_music := current_music_track != ""
+	for track_key in _music_players.keys():
+		_kill_music_tween(track_key)
+		var player := _music_players[track_key] as AudioStreamPlayer
+		player.stop()
+		player.stream = null
+	current_music_track = ""
+	# AudioServer frees stopped playbacks on its mix thread; give it one mix period
+	# before engine shutdown tears the server down, otherwise the OGG playback leaks.
+	if had_music:
+		OS.delay_msec(MUSIC_SHUTDOWN_DRAIN_MS)
 
 func simulate_recenter() -> void:
 	_on_openxr_pose_recentered()

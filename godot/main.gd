@@ -524,6 +524,7 @@ func _on_flow_state_changed(_prev: int, next_state: int) -> void:
 			active_mechanic = null
 	if next_state == ZenoEnums.AppState.RESULTS or next_state == ZenoEnums.AppState.SESSION_START:
 		Platform.play_sfx("gong", 0)
+	Platform.play_music(ZenoMusic.track_for_state(next_state, Platform.current_music_track))
 
 func _on_round_started(_round_idx: int, exercise_id: int) -> void:
 	auto_pause_monitor.reset()

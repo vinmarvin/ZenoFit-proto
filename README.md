@@ -31,7 +31,7 @@ XR-FP/
   - *7 latihan berdurasi (timed):* `Board Smash`, `Wide Split`, `Sky Reach`, `Orbit Flow`, `Wrist Twist`, `Torso Twist`, dan `Horizon Gaze`;
   - *4 latihan two-set mechanical tension (`2 × 12` repetisi):* `Shoulder Press`, `Bicep Curl`, `Arm Circles`, dan `Lateral Raise` (dengan catatan opsional *dumbbell* pada 3 latihan pertama);
   - lengkap dengan mode `Quick Break` (5 ronde), **Session Input Lock** (`Controller` / `Hand Tracking`), UI spasial *Dark-Sage Glass* 11 layar ([`berkas/UI.pdf`](./berkas/UI.pdf)), kamera stasioner bebas goyang, serta `Zeno` FoV-safe (`<= 24°`) dengan 11 demo gerakan.
-- Menjalankan *acceptance test suite* secara *headless* (target: **`TOTAL PASSED: 101 | TOTAL FAILED: 0`**; lihat [`02-Setup-Testing-And-Build.md`](./berkas/GodotDocs/DeveloperGuide/02-Setup-Testing-And-Build.md) untuk perintah Windows/macOS & build APK headset):
+- Menjalankan *acceptance test suite* secara *headless* (target: **`TOTAL PASSED: 108 | TOTAL FAILED: 0`**; lihat [`02-Setup-Testing-And-Build.md`](./berkas/GodotDocs/DeveloperGuide/02-Setup-Testing-And-Build.md) untuk perintah Windows/macOS & build APK headset):
 
   ```bash
   godot --headless --xr-mode off --path godot --import

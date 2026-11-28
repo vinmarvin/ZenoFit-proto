@@ -65,7 +65,7 @@ Desktop Simulator, headless acceptance tests, and Android APK export/sideloading
 ### Step A — Refresh the Class Cache (Fresh Clones / New Scripts)
 Always run `--import` once on a fresh checkout or after pulling commits that add new `class_name` scripts so `godot/.godot/global_script_class_cache.cfg` stays current.
 
-### Step B — Run the 101-Assertion Acceptance Suite & Boot Check
+### Step B — Run the 108-Assertion Acceptance Suite & Boot Check
 
 #### Linux
 ```bash
@@ -90,7 +90,7 @@ godot --headless --xr-mode off --path godot --quit-after 2
 
 Expected test summary (exit code `0`, zero parse errors, zero ObjectDB leaks):
 ```text
-TOTAL PASSED: 101 | TOTAL FAILED: 0
+TOTAL PASSED: 108 | TOTAL FAILED: 0
 ```
 
 > **Sandbox Note:** If `user://` cannot be written inside an isolated terminal sandbox, `SaveService` automatically falls back to `/tmp/zenofit_userdata/` without failing persistence.

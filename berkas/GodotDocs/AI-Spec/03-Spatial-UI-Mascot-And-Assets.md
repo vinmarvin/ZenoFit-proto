@@ -75,4 +75,13 @@ All 3D VR menus render high-DPI Godot `Control` trees inside a transparent `SubV
 
 - **Procedural Geometry Budget:** All runtime-generated geometries (`MechanicalTensionGuide` tubes/beads/rings, `MechanicBase` orbs/boxes/lanterns/dials/VFX, `Main` hand motion trails) strictly enforce `SHADOW_CASTING_SETTING_OFF`.
 
+### Background Music (`godot/assets/audio/`, OGG, imported `loop=true`)
+| Track | Plays During | Notes |
+| :--- | :--- | :--- |
+| **`MainMenu_BGM.ogg`** (`menu`) | `WELCOME`, `MAIN_MENU`, `EXERCISE_SELECT`, `EXERCISE_PREVIEW`, `TUTORIAL`, `CREDITS` | Restarts from the top when returning from Results. |
+| **`Workout_Play.ogg`** (`workout_play`) | `SESSION_START`, `ROUND_INTRO`, `ROUND_PLAY`, `ROUND_OUTRO`, `PAUSED` | Continuous across rounds, pause and Settings-from-Pause (never restarts mid-session). |
+| **`Workout_Complete.ogg`** (`workout_complete`) | `RESULTS` | Loops for as long as the player stays on the Results screen. |
+
+`SETTINGS`, `EXIT_CONFIRM`, and `CALIBRATION` keep whichever track is already playing (fallback `menu`). Switching cross-fades over `0.8 s`; music volume follows the Settings `Audio` slider (`audio_volume` x `0.55`, `0` = silent).
+
 > **Asset Sourcing Policy:** Every 3D asset bundled in the final build is either generated (`Zeno_WithTexture.glb`, `KarateBoard.glb`) or sourced from external asset stores such as Sketchfab (`Environment.glb`). The GA3 reconstructed water bottle (`ga3/scan_fitted.glb`) is strictly course documentation and is **not** loaded or shipped in the Godot build.

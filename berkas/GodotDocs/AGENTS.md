@@ -9,7 +9,7 @@
 ## Engine, Platform & Render Budget
 - **Engine:** Godot `4.7.2.stable`, **GDScript only**, **`gl_compatibility` renderer**, OpenXR enabled (`Reference Space = Local / Seated`), Dynamic Foveation Level 2, `ETC2/ASTC` VRAM compression.
 - **Multi-Platform Targets:** **PICO 4 Ultra** (`preset.0` -> `build/ZenoFit-Godot-Pico4Ultra.apk`), **Meta Quest 2 / 3 / 3S** (`preset.1` -> `build/ZenoFit-Godot-Quest.apk`), and **Linux Desktop Simulator** (`preset.2`). Android package name: `com.zenofit.godot.mockup`.
-- **Platform Abstraction:** All XR/vendor calls (OpenXR init, Session Input Lock sampling, haptics, passthrough, recenter, SFX) MUST pass through `godot/autoload/platform.gd`.
+- **Platform Abstraction:** All XR/vendor calls (OpenXR init, Session Input Lock sampling, haptics, passthrough, recenter, SFX, background music) MUST pass through `godot/autoload/platform.gd`.
 - **Render Budget (72–90 FPS standalone mobile VR):**
   - Disable real-time shadows (`SHADOW_CASTING_SETTING_OFF` and `DirectionalLight3D.shadow_enabled = false`) across environment, props, Zeno, and 3D UI panels.
   - Strip all stray kitbash meshes outside `["group3", "group4", "walls", "roof", "group7", "group8"]` in `Environment.glb`.
@@ -20,6 +20,7 @@
 - `Environment.glb` — Japanese minimalist calm room downloaded from Sketchfab (`jrevel`, CC BY 4.0; floor shifted `+0.75 m` Z via `DojoEnvironmentLoader`, 6 room groups kept, 28 stray kitbash nodes stripped).
 - `Zeno_WithTexture.glb` — Sole textured rigged mascot coach (generated; used exclusively by `FloatingMascotCoach`; `Ground_Ring*` hidden in runtime). Legacy `Floating Mascots.glb` is deleted and must NOT return.
 - `KarateBoard.glb` — Interactive wooden breaking board (generated; `604` tris; `Board_Intact` + `Board_Half_Left`/`Right` + `Splinter_1..6` + `Break` animation) managed via `KarateBoardProp`.
+- `audio/MainMenu_BGM.ogg`, `audio/Workout_Play.ogg`, `audio/Workout_Complete.ogg` — Looped background music (imported `loop=true`, originals in `asset/Audio/`). `ZenoMusic.track_for_state()` (`godot/core/music_director.gd`) maps states to tracks and `Platform.play_music()` cross-fades (`0.8 s`): menu screens -> `MainMenu_BGM`; `SESSION_START`/`ROUND_*`/`PAUSED` -> `Workout_Play` (continuous across rounds); `RESULTS` -> `Workout_Complete` looping until the player leaves Results; `SETTINGS`/`EXIT_CONFIRM`/`CALIBRATION` keep the current track. Music follows `audio_volume` x `MUSIC_GAIN 0.55`.
 
 ## Coordinate Space, Stationary Camera & Ergonomics
 - **SpecSpace vs. Godot:** `SpecSpace` is **left-handed** (`+X` right, `+Y` up, `+Z` FORWARD; positive yaw = turn RIGHT). Godot is **right-handed** (`-Z` forward; positive yaw = turn LEFT). Convert ONLY via `godot/core/spec_space.gd`.
@@ -56,7 +57,7 @@ Refresh the local Godot class cache on fresh checkouts or after pulling new `cla
 godot --headless --xr-mode off --path godot --import
 godot --headless --xr-mode off --path godot -s res://tests/run_acceptance_tests.gd
 ```
-Target: `TOTAL PASSED: 101 | TOTAL FAILED: 0` (`16` test groups) with zero Godot parse errors or ObjectDB leaks.
+Target: `TOTAL PASSED: 108 | TOTAL FAILED: 0` (`17` test groups) with zero Godot parse errors or ObjectDB leaks.
 
 ## Non-Medical Product Boundary
 - ZenoFit is an active-break movement & posture wellness game, NOT a medical or therapeutic device. Never add clinical diagnosis, pain-treatment, or optical strain-cure claims in UI copy, code, or docs.

@@ -18,7 +18,7 @@ Run headless without OpenXR hardware before committing any change to `godot/`:
 godot --headless --xr-mode off --path /home/ramirez/XR-FP/godot -s res://tests/run_acceptance_tests.gd
 ```
 
-Expected exit code: **`0`**, summary **`TOTAL PASSED: 101 | TOTAL FAILED: 0`**, with zero GDScript compile errors and zero leaked `ObjectDB` instances.
+Expected exit code: **`0`**, summary **`TOTAL PASSED: 108 | TOTAL FAILED: 0`**, with zero GDScript compile errors and zero leaked `ObjectDB` instances.
 
 To verify `main.tscn` and all autoload singletons boot cleanly in Desktop Simulator mode:
 
@@ -28,7 +28,7 @@ godot --headless --xr-mode off --path /home/ramirez/XR-FP/godot --quit-after 2
 
 ---
 
-## 2. Acceptance Suite Breakdown (`101` Assertions across `16` Test Groups)
+## 2. Acceptance Suite Breakdown (`108` Assertions across `17` Test Groups)
 
 | Test Function (`ZenoAcceptanceSuite`) | Test ID(s) | Assertions | What It Verifies |
 | :--- | :--- | :---: | :--- |
@@ -48,4 +48,5 @@ godot --headless --xr-mode off --path /home/ramirez/XR-FP/godot --quit-after 2
 | `test_scoring_tempo_and_session_draw` | `TEMPO`, `SCORING`, `QUICK-BREAK` | 3 | `AdaptiveTempo` bumps `60 -> 65 BPM` at `7/8 (87.5%)`; `ZenoScoring` streak `10` applies `1.5x` multiplier (`137 -> 205 pts`); `draw_quick_break_mix` produces 5 exercises covering `Active/Mobility/Posture` with non-consecutive `Level B` |
 | `test_calibration_and_persistence` | `CAL-3STEP`, `SAVE-SVC` | 4 | 3-step `CalibrationController` progression (`1/3 -> COMFORT_REACH -> LAP_ZONE -> COMPLETE`); `SaveServiceClass` saves & reloads calibration, personal best, and `get_weekly_stats()` cleanly |
 | `test_ui_flow_hud_ergonomics_and_no_debug_strings` | `FLOW-UI`, `HUD-ERGONOMICS`, `PANEL-RESIZE`, `NO-DEBUG-UI`, `CREDITS-ITS` | 16 | Full 11-screen flow (`BOOT -> WELCOME -> MAIN_MENU -> EXERCISE_SELECT -> EXERCISE_PREVIEW -> ROUND_PLAY -> PAUSED -> RESULTS`); `adjust_hud_distance` clamps `[1.30, 2.20]` & resets to `1.65`; `adjust_hud_scale` clamps `[0.85, 1.20]` & resets to `1.00`; panel resize transitions across all 12 built states & all 4 Settings tabs fit without viewport overflow or clipping; zero forbidden debug strings (`M01..M10`, `[Tab]`, `[Space]`, `Politeknik`, `Fruit Harvester`, `Makiwara`) across all 12 built states + exercise copy; Credits contains `Institut Teknologi Sepuluh Nopember` and `jrevel` |
-| **Total** | | **101** | **All passing (`TOTAL FAILED: 0`)** |
+| `test_background_music_tracks` | `MUSIC-MAP`, `MUSIC-ASSETS`, `MUSIC-SWITCH`, `MUSIC-VOLUME` | 7 | `ZenoMusic.track_for_state()` maps menu screens -> `menu`, `SESSION_START`/`ROUND_INTRO`/`ROUND_PLAY`/`ROUND_OUTRO`/`PAUSED` -> `workout_play`, `RESULTS` -> `workout_complete`, `SETTINGS` keeps current track (fallback `menu`), `BOOT` silent; all 3 OGG tracks load as looping streams in `Platform`; re-requesting the active track is a no-op and Results switches `workout_play -> workout_complete`; `audio_volume = 0` silences music live |
+| **Total** | | **108** | **All passing (`TOTAL FAILED: 0`)** |

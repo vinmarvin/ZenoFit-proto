@@ -4,7 +4,7 @@ extends RefCounted
 ## Automated Acceptance Test Suite for ZenoFit v1.0 (Godot 4.7).
 ## Covers SpecSpace, Stationary BodyFrame, Integrated Assets (KarateBoard, Environment,
 ## Zeno_WithTexture), FoV-Safe Zeno, Session Input Lock, All 7 Exercises,
-## Safety Monitors, 11-Screen UI Flow, Persistence, and Zero Debug UI strings.
+## Safety Monitors, 11-Screen UI Flow, Persistence, Zero Debug UI strings, and Background Music.
 
 var passed_count: int = 0
 var failed_count: int = 0
@@ -47,6 +47,7 @@ func run_all(host_root: Node = null) -> Dictionary:
 	test_scoring_tempo_and_session_draw()
 	test_calibration_and_persistence()
 	test_ui_flow_hud_ergonomics_and_no_debug_strings(host_root)
+	test_background_music_tracks()
 
 	return {
 		"passed": passed_count,
@@ -474,6 +475,59 @@ func test_ui_flow_hud_ergonomics_and_no_debug_strings(host_root: Node = null) ->
 	ui.free()
 	flow._exit_tree()
 	flow.free()
+
+func test_background_music_tracks() -> void:
+	# State -> track mapping
+	var menu_states := [
+		ZenoEnums.AppState.WELCOME, ZenoEnums.AppState.MAIN_MENU,
+		ZenoEnums.AppState.EXERCISE_SELECT, ZenoEnums.AppState.EXERCISE_PREVIEW,
+		ZenoEnums.AppState.TUTORIAL, ZenoEnums.AppState.CREDITS
+	]
+	var menu_ok := true
+	for st in menu_states:
+		menu_ok = menu_ok and ZenoMusic.track_for_state(st, ZenoMusic.TRACK_WORKOUT_COMPLETE) == ZenoMusic.TRACK_MENU
+	_assert_true("MUSIC-MAP", menu_ok, "Menu screens play MainMenu_BGM")
+	var play_states := [
+		ZenoEnums.AppState.SESSION_START, ZenoEnums.AppState.ROUND_INTRO,
+		ZenoEnums.AppState.ROUND_PLAY, ZenoEnums.AppState.ROUND_OUTRO,
+		ZenoEnums.AppState.PAUSED
+	]
+	var play_ok := true
+	for st in play_states:
+		play_ok = play_ok and ZenoMusic.track_for_state(st, ZenoMusic.TRACK_MENU) == ZenoMusic.TRACK_WORKOUT_PLAY
+	_assert_true("MUSIC-MAP", play_ok, "Whole active session (rounds + pause) plays Workout_Play")
+	_assert_true("MUSIC-MAP", ZenoMusic.track_for_state(ZenoEnums.AppState.RESULTS, ZenoMusic.TRACK_WORKOUT_PLAY) == ZenoMusic.TRACK_WORKOUT_COMPLETE, "Results screen plays Workout_Complete")
+	_assert_true(
+		"MUSIC-MAP",
+		ZenoMusic.track_for_state(ZenoEnums.AppState.SETTINGS, ZenoMusic.TRACK_WORKOUT_PLAY) == ZenoMusic.TRACK_WORKOUT_PLAY
+		and ZenoMusic.track_for_state(ZenoEnums.AppState.SETTINGS, ZenoMusic.TRACK_NONE) == ZenoMusic.TRACK_MENU
+		and ZenoMusic.track_for_state(ZenoEnums.AppState.BOOT) == ZenoMusic.TRACK_NONE,
+		"Settings overlay keeps current track (falls back to menu); Boot is silent"
+	)
+
+	# Platform loads all three looped tracks and switches without restarting the same track
+	# (run detached from the tree: the CLI root is not live during _initialize, so fades apply instantly)
+	var plat: Node = load("res://autoload/platform.gd").new()
+	plat._init_music_players()
+	var loaded_ok := true
+	for key in ZenoMusic.TRACK_PATHS.keys():
+		loaded_ok = loaded_ok and plat.has_music_track(key) and plat.is_music_track_looping(key)
+	_assert_true("MUSIC-ASSETS", loaded_ok, "MainMenu_BGM, Workout_Play, Workout_Complete load as looping OGG streams")
+	plat.play_music(ZenoMusic.TRACK_WORKOUT_PLAY)
+	plat.play_music(ZenoMusic.TRACK_WORKOUT_PLAY)
+	var same_ok: bool = String(plat.last_music_event.get("previous", "?")) == ZenoMusic.TRACK_NONE
+	plat.play_music(ZenoMusic.TRACK_WORKOUT_COMPLETE)
+	_assert_true(
+		"MUSIC-SWITCH",
+		same_ok and plat.current_music_track == ZenoMusic.TRACK_WORKOUT_COMPLETE
+		and String(plat.last_music_event.get("previous", "")) == ZenoMusic.TRACK_WORKOUT_PLAY,
+		"Re-requesting active track is a no-op; Results cross-fades Workout_Play -> Workout_Complete"
+	)
+	plat.audio_volume = 0.0
+	var muted_db: float = (plat.get_node("Music_%s" % ZenoMusic.TRACK_WORKOUT_COMPLETE) as AudioStreamPlayer).volume_db
+	_assert_true("MUSIC-VOLUME", muted_db <= plat.MUSIC_SILENT_DB + 0.01, "Volume 0 in Settings silences background music live")
+	plat.stop_music()
+	plat.free()
 
 func _collect_ui_labels(node: Node, out: Array[String]) -> void:
 	if node == null:

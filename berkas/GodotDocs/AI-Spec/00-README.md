@@ -89,7 +89,7 @@ Every active script and resource in `godot/` maps 1:1 to a specification or guid
   - [`01-Gameplay-And-Exercises.md`](./01-Gameplay-And-Exercises.md) — Core loop, scoring, tempo, and all 11 curated exercises + `MechanicsMath` & `MechanicalTensionGuide` formulas
   - [`02-Coordinate-Space-Calibration-And-Safety.md`](./02-Coordinate-Space-Calibration-And-Safety.md) — `SpecSpace`, stationary `BodyFrame`, 3-step calibration, Session Input Lock, Safety Monitors, `SaveService`
   - [`03-Spatial-UI-Mascot-And-Assets.md`](./03-Spatial-UI-Mascot-And-Assets.md) — `UI.pdf` Dark-Sage UI, 11-screen flow, HUD ergonomics, FoV-safe Zeno, and 3D assets
-  - [`04-Acceptance-Tests-And-Traceability.md`](./04-Acceptance-Tests-And-Traceability.md) — Automated headless test suite (`101` assertions across `16` test functions)
+  - [`04-Acceptance-Tests-And-Traceability.md`](./04-Acceptance-Tests-And-Traceability.md) — Automated headless test suite (`108` assertions across `17` test functions)
 - **Developer Guides (`DeveloperGuide/`):**
   - [`01-Architecture-And-How-It-Works.md`](../DeveloperGuide/01-Architecture-And-How-It-Works.md)
   - [`02-Setup-Testing-And-Build.md`](../DeveloperGuide/02-Setup-Testing-And-Build.md)
